@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <ProjectGuid>{6D912EB4-2E86-4FB9-8621-3E9A13E572A8}</ProjectGuid>
+    <RootNamespace>MapReaderV2</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared" />
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <LinkIncremental>true</LinkIncremental>
+    <IncludePath>D:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Include;$(ProjectDir)UE3;$(SolutionDir)Detour;$(SolutionDir)Recast;$(SolutionDir)DetourCrowd;$(SolutionDir)DetourTileCache;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+    <LibraryWPath>$(LibraryWPath)</LibraryWPath>
+    <IncludePath>D:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Include;$(ProjectDir)UE3;$(SolutionDir)Detour;$(SolutionDir)Recast;$(SolutionDir)DetourCrowd;$(SolutionDir)DetourTileCache;$(IncludePath)</IncludePath>
+    <LibraryPath>$(SolutionDir)libs\d3d\;$(SolutionDir)x64\Debug\;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <LinkIncremental>false</LinkIncremental>
+    <IncludePath>D:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Include;$(ProjectDir)UE3;$(SolutionDir)Detour;$(SolutionDir)Recast;$(SolutionDir)DetourCrowd;$(SolutionDir)DetourTileCache;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <LibraryWPath>$(LibraryWPath)</LibraryWPath>
+    <IncludePath>D:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Include;$(ProjectDir)UE3;$(SolutionDir)Detour;$(SolutionDir)Recast;$(SolutionDir)DetourCrowd;$(SolutionDir)DetourTileCache;$(IncludePath)</IncludePath>
+    <LibraryPath>$(SolutionDir)libs\d3d\;$(SolutionDir)x64\Release\;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>d3d11.lib;d3dx11.lib;dinput8.lib;d3dcompiler.lib;d3d10.lib;d3dx10.lib;detour.lib;detourcrowd.lib;detourtilecache.lib;recast.lib</AdditionalDependencies>
+      <EntryPointSymbol>
+      </EntryPointSymbol>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>d3d11.lib;d3dx11.lib;dinput8.lib;d3dcompiler.lib;d3d10.lib;d3dx10.lib;detour.lib;detourcrowd.lib;detourtilecache.lib;recast.lib</AdditionalDependencies>
+      <EntryPointSymbol>
+      </EntryPointSymbol>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="App.h" />
+    <ClInclude Include="ConfigTool.h" />
+    <ClInclude Include="D3D.h" />
+    <ClInclude Include="D3DDriver.h" />
+    <ClInclude Include="Environment.h" />
+    <ClInclude Include="GUI.h" />
+    <ClInclude Include="imgui-1.76\imconfig.h" />
+    <ClInclude Include="imgui-1.76\imgui.h" />
+    <ClInclude Include="imgui-1.76\imgui_impl_dx11.h" />
+    <ClInclude Include="imgui-1.76\imgui_impl_win32.h" />
+    <ClInclude Include="imgui-1.76\imgui_internal.h" />
+    <ClInclude Include="imgui-1.76\imstb_rectpack.h" />
+    <ClInclude Include="imgui-1.76\imstb_textedit.h" />
+    <ClInclude Include="imgui-1.76\imstb_truetype.h" />
+    <ClInclude Include="NavmeshTool.h" />
+    <ClInclude Include="Navmesh\ChunkyTriMesh.h" />
+    <ClInclude Include="Navmesh\InputGeom.h" />
+    <ClInclude Include="Navmesh\MeshLoaderObj.h" />
+    <ClInclude Include="Navmesh\Navmesh.h" />
+    <ClInclude Include="PackagesTool.h" />
+    <ClInclude Include="Renderable.h" />
+    <ClInclude Include="Scene.h" />
+    <ClInclude Include="SettingsTool.h" />
+    <ClInclude Include="SMath\SMath.h" />
+    <ClInclude Include="SMath\SMathSSE.h" />
+    <ClInclude Include="UE3\Actor.h" />
+    <ClInclude Include="UE3\Brush.h" />
+    <ClInclude Include="UE3\CustomFArrays.h" />
+    <ClInclude Include="UE3\Enums.h" />
+    <ClInclude Include="UE3\FArray.h" />
+    <ClInclude Include="UE3\FBoxSphereBounds.h" />
+    <ClInclude Include="UE3\FBulkData.h" />
+    <ClInclude Include="UE3\FColor.h" />
+    <ClInclude Include="UE3\FGlobalMath.h" />
+    <ClInclude Include="UE3\FGUID.h" />
+    <ClInclude Include="UE3\FIStream.h" />
+    <ClInclude Include="UE3\FLightMap.h" />
+    <ClInclude Include="UE3\FMap.h" />
+    <ClInclude Include="UE3\FMatrix.h" />
+    <ClInclude Include="UE3\FMesh.h" />
+    <ClInclude Include="UE3\FMipMap.h" />
+    <ClInclude Include="UE3\FPropertyTag.h" />
+    <ClInclude Include="UE3\FQuat.h" />
+    <ClInclude Include="UE3\FReadable.h" />
+    <ClInclude Include="UE3\FRotator.h" />
+    <ClInclude Include="UE3\FStaticMesh.h" />
+    <ClInclude Include="UE3\FStreamableTextureInstance.h" />
+    <ClInclude Include="UE3\FString.h" />
+    <ClInclude Include="UE3\FTerrain.h" />
+    <ClInclude Include="UE3\FVector.h" />
+    <ClInclude Include="UE3\Level.h" />
+    <ClInclude Include="UE3\MeshComponent.h" />
+    <ClInclude Include="UE3\Model.h" />
+    <ClInclude Include="UE3\PackageManager.h" />
+    <ClInclude Include="UE3\Polys.h" />
+    <ClInclude Include="UE3\StaticMesh.h" />
+    <ClInclude Include="UE3\Terrain.h" />
+    <ClInclude Include="UE3\TerrainComponent.h" />
+    <ClInclude Include="UE3\TextBuffer.h" />
+    <ClInclude Include="UE3\Texture2D.h" />
+    <ClInclude Include="UE3\typeDefs.h" />
+    <ClInclude Include="UE3\UClass.h" />
+    <ClInclude Include="UE3\UComponent.h" />
+    <ClInclude Include="UE3\UMath.h" />
+    <ClInclude Include="UE3\UObject.h" />
+    <ClInclude Include="UE3\UPackage.h" />
+    <ClInclude Include="WinApi.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="App.cpp" />
+    <ClCompile Include="ConfigTool.cpp" />
+    <ClCompile Include="D3DDriver.cpp" />
+    <ClCompile Include="Environment.cpp" />
+    <ClCompile Include="GUI.cpp" />
+    <ClCompile Include="imgui-1.76\imgui.cpp" />
+    <ClCompile Include="imgui-1.76\imgui_demo.cpp" />
+    <ClCompile Include="imgui-1.76\imgui_draw.cpp" />
+    <ClCompile Include="imgui-1.76\imgui_impl_dx11.cpp" />
+    <ClCompile Include="imgui-1.76\imgui_impl_win32.cpp" />
+    <ClCompile Include="imgui-1.76\imgui_widgets.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="NavmeshTool.cpp" />
+    <ClCompile Include="Navmesh\ChunkyTriMesh.cpp" />
+    <ClCompile Include="Navmesh\InputGeom.cpp" />
+    <ClCompile Include="Navmesh\MeshLoaderObj.cpp" />
+    <ClCompile Include="PackagesTool.cpp" />
+    <ClCompile Include="Renderable.cpp" />
+    <ClCompile Include="Scene.cpp" />
+    <ClCompile Include="SettingsTool.cpp" />
+    <ClCompile Include="SMath\SMath.cpp" />
+    <ClCompile Include="UE3\Actor.cpp" />
+    <ClCompile Include="UE3\CustomFArrays.cpp" />
+    <ClCompile Include="UE3\FArray.cpp" />
+    <ClCompile Include="UE3\FBoxSphereBounds.cpp" />
+    <ClCompile Include="UE3\FBulkData.cpp" />
+    <ClCompile Include="UE3\FColor.cpp" />
+    <ClCompile Include="UE3\FGUID.cpp" />
+    <ClCompile Include="UE3\FIStream.cpp" />
+    <ClCompile Include="UE3\FLightMap.cpp" />
+    <ClCompile Include="UE3\FMap.cpp" />
+    <ClCompile Include="UE3\FMatrix.cpp" />
+    <ClCompile Include="UE3\FMesh.cpp" />
+    <ClCompile Include="UE3\FMipMap.cpp" />
+    <ClCompile Include="UE3\FPropertyTag.cpp" />
+    <ClCompile Include="UE3\FReadable.cpp" />
+    <ClCompile Include="UE3\FRotator.cpp" />
+    <ClCompile Include="UE3\FStaticMesh.cpp" />
+    <ClCompile Include="UE3\FStreamableTextureInstance.cpp" />
+    <ClCompile Include="UE3\FString.cpp" />
+    <ClCompile Include="UE3\FTerrain.cpp" />
+    <ClCompile Include="UE3\FVector.cpp" />
+    <ClCompile Include="UE3\Level.cpp" />
+    <ClCompile Include="UE3\MeshComponent.cpp" />
+    <ClCompile Include="UE3\Model.cpp" />
+    <ClCompile Include="UE3\PackageManager.cpp" />
+    <ClCompile Include="UE3\Polys.cpp" />
+    <ClCompile Include="UE3\StaticMesh.cpp" />
+    <ClCompile Include="UE3\Terrain.cpp" />
+    <ClCompile Include="UE3\TerrainComponent.cpp" />
+    <ClCompile Include="UE3\TextBuffer.cpp" />
+    <ClCompile Include="UE3\Texture2D.cpp" />
+    <ClCompile Include="UE3\typeDefs.cpp" />
+    <ClCompile Include="UE3\UClass.cpp" />
+    <ClCompile Include="UE3\UComponent.cpp" />
+    <ClCompile Include="UE3\UObject.cpp" />
+    <ClCompile Include="UE3\UPackage.cpp" />
+    <ClCompile Include="WinApi.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

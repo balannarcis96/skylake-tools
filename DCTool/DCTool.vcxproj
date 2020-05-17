@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>16.0</VCProjectVersion>
+    <ProjectGuid>{6E1B0140-94A7-4108-A518-DB3457398DD7}</ProjectGuid>
+    <RootNamespace>DCTool</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+    <IncludePath>D:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Include;$(SolutionDir)libs\zlib\Inc;$(SolutionDir)libs\lzopro\include;$(SolutionDir)Crypt;$(IncludePath)</IncludePath>
+    <LibraryPath>E:\Microsoft DirectX SDK %28June 2010%29\Lib\x64;$(SolutionDir)libs\zlib\Lib;$(SolutionDir)libs\lzopro\lib;$(SolutionDir)x64\Debug;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <LinkIncremental>true</LinkIncremental>
+    <IncludePath>D:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Include;$(SolutionDir)libs\zlib\Inc;$(SolutionDir)libs\lzopro\include;$(IncludePath)</IncludePath>
+    <LibraryPath>E:\Microsoft DirectX SDK %28June 2010%29\Lib\x64;$(SolutionDir)libs\zlib\Lib;$(SolutionDir)libs\lzopro\lib;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <LinkIncremental>false</LinkIncremental>
+    <IncludePath>D:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Include;$(SolutionDir)libs\zlib\Inc;$(SolutionDir)libs\lzopro\include;$(IncludePath)</IncludePath>
+    <LibraryPath>E:\Microsoft DirectX SDK %28June 2010%29\Lib\x64;$(SolutionDir)libs\zlib\Lib;$(SolutionDir)libs\lzopro\lib;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <IncludePath>D:\Program Files %28x86%29\Microsoft DirectX SDK %28June 2010%29\Include;$(SolutionDir)libs\zlib\Inc;$(SolutionDir)libs\lzopro\include;$(SolutionDir)Crypt;$(IncludePath)</IncludePath>
+    <LibraryPath>E:\Microsoft DirectX SDK %28June 2010%29\Lib\x64;$(SolutionDir)libs\zlib\Lib;$(SolutionDir)libs\lzopro\lib;$(SolutionDir)x64\Release;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>d3d11.lib;d3dx11.lib;dinput8.lib;d3dcompiler.lib;d3d10.lib;d3dx10.lib;zlib_64.lib;zlibd_64.lib;lzopro_64.lib;Crypt.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>d3d11.lib;d3dx11.lib;dinput8.lib;d3dcompiler.lib;d3d10.lib;d3dx10.lib;zlib_64.lib;zlibd_64.lib;lzopro_64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>d3d11.lib;d3dx11.lib;dinput8.lib;d3dcompiler.lib;d3d10.lib;d3dx10.lib;zlib_64.lib;zlibd_64.lib;lzopro_64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ConformanceMode>true</ConformanceMode>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>d3d11.lib;d3dx11.lib;dinput8.lib;d3dcompiler.lib;d3d10.lib;d3dx10.lib;zlib_64.lib;zlibd_64.lib;lzopro_64.lib;Crypt.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="App.cpp" />
+    <ClCompile Include="D3DDriver.cpp" />
+    <ClCompile Include="DC\AES.cpp" />
+    <ClCompile Include="DC\AES2.cpp" />
+    <ClCompile Include="DC\DC.cpp" />
+    <ClCompile Include="DC\DCAdaptors.cpp" />
+    <ClCompile Include="DC\FIStream.cpp" />
+    <ClCompile Include="DC\Structure.cpp" />
+    <ClCompile Include="DC\UE3.cpp" />
+    <ClCompile Include="DC\UnArchive.cpp" />
+    <ClCompile Include="DC\UnMisc.cpp" />
+    <ClCompile Include="Environment.cpp" />
+    <ClCompile Include="GUI.cpp" />
+    <ClCompile Include="imgui-1.76\imgui.cpp" />
+    <ClCompile Include="imgui-1.76\imgui_demo.cpp" />
+    <ClCompile Include="imgui-1.76\imgui_draw.cpp" />
+    <ClCompile Include="imgui-1.76\imgui_impl_dx11.cpp" />
+    <ClCompile Include="imgui-1.76\imgui_impl_win32.cpp" />
+    <ClCompile Include="imgui-1.76\imgui_widgets.cpp" />
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="Renderable.cpp" />
+    <ClCompile Include="Scene.cpp" />
+    <ClCompile Include="SettingsTool.cpp" />
+    <ClCompile Include="SMath\SMath.cpp" />
+    <ClCompile Include="WinApi.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="App.h" />
+    <ClInclude Include="D3D.h" />
+    <ClInclude Include="D3DDriver.h" />
+    <ClInclude Include="DC\AES.h" />
+    <ClInclude Include="DC\AES2.h" />
+    <ClInclude Include="DC\DC.h" />
+    <ClInclude Include="DC\DCAdaptors.h" />
+    <ClInclude Include="DC\FIStream.h" />
+    <ClInclude Include="DC\Structure.h" />
+    <ClInclude Include="DC\UE3.h" />
+    <ClInclude Include="Environment.h" />
+    <ClInclude Include="GUI.h" />
+    <ClInclude Include="imgui-1.76\imconfig.h" />
+    <ClInclude Include="imgui-1.76\imgui.h" />
+    <ClInclude Include="imgui-1.76\imgui_impl_dx11.h" />
+    <ClInclude Include="imgui-1.76\imgui_impl_win32.h" />
+    <ClInclude Include="imgui-1.76\imgui_internal.h" />
+    <ClInclude Include="imgui-1.76\imstb_rectpack.h" />
+    <ClInclude Include="imgui-1.76\imstb_textedit.h" />
+    <ClInclude Include="imgui-1.76\imstb_truetype.h" />
+    <ClInclude Include="Renderable.h" />
+    <ClInclude Include="Scene.h" />
+    <ClInclude Include="SettingsTool.h" />
+    <ClInclude Include="SMath\SMath.h" />
+    <ClInclude Include="SMath\SMathSSE.h" />
+    <ClInclude Include="typedefs.h" />
+    <ClInclude Include="WinApi.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

@@ -1,0 +1,303 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="D3D">
+      <UniqueIdentifier>{b34a365b-b4da-412b-a523-444e3e210190}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imgui">
+      <UniqueIdentifier>{e541509b-c891-48dd-bc78-4ddeab3e3765}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="UE3">
+      <UniqueIdentifier>{d49a5a0a-3972-4498-851c-744fd91d5151}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="App">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="App\Env">
+      <UniqueIdentifier>{d04a3b3c-c6cc-478a-9a0b-762352dbe403}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Navmesh">
+      <UniqueIdentifier>{6654eb3f-921c-4830-b2e1-9e78dae761e2}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="UE3\UPackage.h">
+      <Filter>UE3</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\Terrain.h">
+      <Filter>UE3</Filter>
+    </ClInclude>
+    <ClInclude Include="Environment.h">
+      <Filter>App\Env</Filter>
+    </ClInclude>
+    <ClInclude Include="PackagesTool.h">
+      <Filter>App\Env</Filter>
+    </ClInclude>
+    <ClInclude Include="NavmeshTool.h">
+      <Filter>App\Env</Filter>
+    </ClInclude>
+    <ClInclude Include="ConfigTool.h">
+      <Filter>App\Env</Filter>
+    </ClInclude>
+    <ClInclude Include="Scene.h">
+      <Filter>App\Env</Filter>
+    </ClInclude>
+    <ClInclude Include="SettingsTool.h">
+      <Filter>App\Env</Filter>
+    </ClInclude>
+    <ClInclude Include="Renderable.h">
+      <Filter>D3D</Filter>
+    </ClInclude>
+    <ClInclude Include="Navmesh\InputGeom.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="Navmesh\ChunkyTriMesh.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="Navmesh\MeshLoaderObj.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="Navmesh\Navmesh.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="App.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui-1.76\imconfig.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui-1.76\imgui.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui-1.76\imgui_impl_dx11.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui-1.76\imgui_impl_win32.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui-1.76\imgui_internal.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui-1.76\imstb_rectpack.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui-1.76\imstb_textedit.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="imgui-1.76\imstb_truetype.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="SMath\SMath.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="SMath\SMathSSE.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\Actor.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\Brush.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\CustomFArrays.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\Enums.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\FArray.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\FBoxSphereBounds.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\FBulkData.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\FColor.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\FGlobalMath.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\FGUID.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\FIStream.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\FLightMap.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\FMap.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\FMatrix.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\FMesh.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\FMipMap.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\FPropertyTag.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\FQuat.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\FReadable.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\FRotator.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\FStaticMesh.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\FStreamableTextureInstance.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\FString.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\FTerrain.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\FVector.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\Level.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\MeshComponent.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\Model.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\PackageManager.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\Polys.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\StaticMesh.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\TerrainComponent.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\TextBuffer.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\Texture2D.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\typeDefs.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\UClass.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\UComponent.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\UMath.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="UE3\UObject.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="GUI.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="WinApi.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="D3D.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="D3DDriver.h">
+      <Filter>App</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
+    <ClCompile Include="Environment.cpp">
+      <Filter>App\Env</Filter>
+    </ClCompile>
+    <ClCompile Include="PackagesTool.cpp">
+      <Filter>App\Env</Filter>
+    </ClCompile>
+    <ClCompile Include="NavmeshTool.cpp">
+      <Filter>App\Env</Filter>
+    </ClCompile>
+    <ClCompile Include="ConfigTool.cpp">
+      <Filter>App\Env</Filter>
+    </ClCompile>
+    <ClCompile Include="Scene.cpp">
+      <Filter>App\Env</Filter>
+    </ClCompile>
+    <ClCompile Include="Renderable.cpp">
+      <Filter>D3D</Filter>
+    </ClCompile>
+    <ClCompile Include="SettingsTool.cpp">
+      <Filter>App\Env</Filter>
+    </ClCompile>
+    <ClCompile Include="Navmesh\InputGeom.cpp" />
+    <ClCompile Include="Navmesh\ChunkyTriMesh.cpp" />
+    <ClCompile Include="Navmesh\MeshLoaderObj.cpp" />
+    <ClCompile Include="App.cpp" />
+    <ClCompile Include="imgui-1.76\imgui.cpp" />
+    <ClCompile Include="imgui-1.76\imgui_demo.cpp" />
+    <ClCompile Include="imgui-1.76\imgui_draw.cpp" />
+    <ClCompile Include="imgui-1.76\imgui_impl_dx11.cpp" />
+    <ClCompile Include="imgui-1.76\imgui_impl_win32.cpp" />
+    <ClCompile Include="imgui-1.76\imgui_widgets.cpp" />
+    <ClCompile Include="SMath\SMath.cpp" />
+    <ClCompile Include="UE3\Actor.cpp" />
+    <ClCompile Include="UE3\CustomFArrays.cpp" />
+    <ClCompile Include="UE3\FArray.cpp" />
+    <ClCompile Include="UE3\FBoxSphereBounds.cpp" />
+    <ClCompile Include="UE3\FBulkData.cpp" />
+    <ClCompile Include="UE3\FColor.cpp" />
+    <ClCompile Include="UE3\FGUID.cpp" />
+    <ClCompile Include="UE3\FIStream.cpp" />
+    <ClCompile Include="UE3\FLightMap.cpp" />
+    <ClCompile Include="UE3\FMap.cpp" />
+    <ClCompile Include="UE3\FMatrix.cpp" />
+    <ClCompile Include="UE3\FMesh.cpp" />
+    <ClCompile Include="UE3\FMipMap.cpp" />
+    <ClCompile Include="UE3\FPropertyTag.cpp" />
+    <ClCompile Include="UE3\FReadable.cpp" />
+    <ClCompile Include="UE3\FRotator.cpp" />
+    <ClCompile Include="UE3\FStaticMesh.cpp" />
+    <ClCompile Include="UE3\FStreamableTextureInstance.cpp" />
+    <ClCompile Include="UE3\FString.cpp" />
+    <ClCompile Include="UE3\FTerrain.cpp" />
+    <ClCompile Include="UE3\FVector.cpp" />
+    <ClCompile Include="UE3\Level.cpp" />
+    <ClCompile Include="UE3\MeshComponent.cpp" />
+    <ClCompile Include="UE3\Model.cpp" />
+    <ClCompile Include="UE3\PackageManager.cpp" />
+    <ClCompile Include="UE3\Polys.cpp" />
+    <ClCompile Include="UE3\StaticMesh.cpp" />
+    <ClCompile Include="UE3\Terrain.cpp" />
+    <ClCompile Include="UE3\TerrainComponent.cpp" />
+    <ClCompile Include="UE3\TextBuffer.cpp" />
+    <ClCompile Include="UE3\Texture2D.cpp" />
+    <ClCompile Include="UE3\typeDefs.cpp" />
+    <ClCompile Include="UE3\UClass.cpp" />
+    <ClCompile Include="UE3\UComponent.cpp" />
+    <ClCompile Include="UE3\UObject.cpp" />
+    <ClCompile Include="UE3\UPackage.cpp" />
+    <ClCompile Include="GUI.cpp" />
+    <ClCompile Include="WinApi.cpp" />
+    <ClCompile Include="D3DDriver.cpp" />
+  </ItemGroup>
+</Project>
