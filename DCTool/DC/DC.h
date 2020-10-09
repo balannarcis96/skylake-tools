@@ -9,8 +9,12 @@
 static INT					GSavingCompressionChunkSize = SAVING_COMPRESSION_CHUNK_SIZE;
 static BOOL					GAlwaysBiasCompressionForSize = FALSE;
 
-#define EU_9303_KEY "457D8D7F84C0D759FB8C802FBDEC3264"
-#define EU_9303_IV "5ADB85308FFD0A33B9B7D32F0AE42255"
+//#define EU_9303_KEY "457D8D7F84C0D759FB8C802FBDEC3264"
+//#define EU_9303_IV "5ADB85308FFD0A33B9B7D32F0AE42255"
+
+//Revision: 366226
+#define EU_9303_KEY "B5AE92062ACC7452EB6FBB44EC2D612D"
+#define EU_9303_IV "11E5B808F6922217F6FFB977321A0960"
 
 struct DCTool : UIElement<UIElementType::DC> {
 	bool Initialize();
@@ -24,8 +28,8 @@ struct DCTool : UIElement<UIElementType::DC> {
 		FileName[0] = 0;
 		SaveFileName[0] = 0;
 
-		strcpy_s(FileName, "DC.bin");
-		//strcpy_s(FileName, "DataCenter_Final_EUR.367406.unpacked");
+		//strcpy_s(FileName, "DC.bin");
+		strcpy_s(FileName, "DataCenter_Final_TW.366226.unpacked");
 		strcpy_s(SaveFileName, "Saved_32.bin");
 	}
 

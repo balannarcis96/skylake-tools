@@ -117,55 +117,89 @@ void DCTool::RenderUI()
 			ImGui::InputText("<<", (char*)IV, 33);
 
 			ImGui::Separator();
+			ImGui::TextColored(SUCCESS_COLOR, "DCToolState: %s", DataCenter.GetDCToolStateStr());
+			if (DataCenter.IsLoaded()) {
+				ImGui::SameLine();
+				ImGui::TextColored(SUCCESS_COLOR, "| Format Version: %d", DataCenter.FormatVersion);
+				ImGui::SameLine();
+				ImGui::TextColored(SUCCESS_COLOR, "| Version: %d", DataCenter.Version);
+			}
+			ImGui::Separator();
 			ImGui::TextColored(INFO_COLOR, "## Load ##");
 			ImGui::Checkbox("IsEncrypted", &IsEncrypted);
 			ImGui::SameLine();
 			ImGui::Checkbox("IsCompressed", &IsCompressed);
 			ImGui::InputText("DC FileName", FileName, 1024);
 
-			if (ImGui::Button("Load DC")) {
-				do {
-					if (strnlen_s(FileName, 1024) == 0) {
-						Message("Please specify the FileName");
-						break;
-					}
+			if (!DataCenter.IsLoaded()) {
+				if (ImGui::Button("Load DC")) {
+					do {
+						if (strnlen_s(FileName, 1024) == 0) {
+							Message("Please specify the FileName");
+							break;
+						}
 
-					auto DCFileName = GD3DDriver.BuildDCPath(FileName);
+						auto DCFileName = GD3DDriver.BuildDCPath(FileName);
 
-					if (!LoadDC(DCFileName.c_str(), IsEncrypted, IsCompressed)) {
-						Message("Failed to load the DC");
-						break;
-					}
+						if (!LoadDC(DCFileName.c_str(), IsEncrypted, IsCompressed)) {
+							Message("Failed to load the DC");
+							break;
+						}
 
-					Message("DC loaded successfully");
+						Message("DC loaded successfully");
 
-				} while (0);
+					} while (0);
+				}
 			}
 
-			ImGui::Separator();
-			ImGui::TextColored(INFO_COLOR, "## Save ##");
-			ImGui::Checkbox("Encrypt", &Encrypt);
-			ImGui::SameLine();
-			ImGui::Checkbox("Compress", &Compress);
-			ImGui::InputText("Save DC FileName", SaveFileName, 1024);
+			if (DataCenter.IsLoaded()) {
+				if (ImGui::Button("Clear DC")) {
+					DataCenter.Clear();
+				}
+			}
 
-			if (ImGui::Button("Save DC")) {
-				do {
-					if (strnlen_s(SaveFileName, 1024) == 0) {
-						Message("Please specify the SaveFileName");
-						break;
-					}
+			if (DataCenter.IsLoaded()) {
+				ImGui::Separator();
+				ImGui::TextColored(INFO_COLOR, "## Save ##");
+				ImGui::Checkbox("Encrypt", &Encrypt);
+				ImGui::SameLine();
+				ImGui::Checkbox("Compress", &Compress);
+				ImGui::InputText("Save DC FileName", SaveFileName, 1024);
 
-					auto DCFileSaveName = GD3DDriver.BuildDCPath(SaveFileName);
+				if (ImGui::Button("Save DC")) {
+					do {
+						if (strnlen_s(SaveFileName, 1024) == 0) {
+							Message("Please specify the SaveFileName");
+							break;
+						}
 
-					if (!SaveDC(DCFileSaveName.c_str(), Encrypt, Compress)) {
-						Message("Failed to save the DC");
-						break;
-					}
+						auto DCFileSaveName = GD3DDriver.BuildDCPath(SaveFileName);
 
-					Message("DC saved successfully");
+						if (!SaveDC(DCFileSaveName.c_str(), Encrypt, Compress)) {
+							Message("Failed to save the DC");
+							break;
+						}
 
-				} while (0);
+						Message("DC saved successfully");
+
+					} while (0);
+				}
+
+				ImGui::Separator();
+				if (ImGui::Button("Export to XML"))
+				{
+					DCAdaptors::DCXMLAdaptor adaptor;
+
+					do {
+						if (!adaptor.FromDC(&DataCenter)) {
+							Message("Failed to build XML adaptor");
+						}
+
+						if (!adaptor.Export(".\\XMLDC\\")) {
+							Message("Failed to export XML data");
+						}
+					} while (0);
+				}
 			}
 
 			ImGui::EndTabItem();
@@ -184,6 +218,8 @@ void DCTool::RenderUI()
 
 bool DCTool::LoadDC(const char* FileName, bool IsEncrypted, bool IsCompressed)
 {
+	DataCenter.Clear();
+
 	FIStream Stream;
 	if (!Stream.load_from_file(FileName)) {
 		Message("Failed to read file [%s]", FileName);

@@ -1,8 +1,21 @@
 #pragma once
 
-#define DC_64 1
-
 namespace S1DataCenter {
+
+	enum class DCState {
+		Idle,
+		Serializing,
+		Preparing,
+		Dumping
+	};
+
+	template<DCState StartState, DCState ExitState = DCState::Idle>
+	struct StateGuard {
+		StateGuard(struct S1DataCenter* dc);
+		~StateGuard();
+	private:
+		TRef<S1DataCenter> dc;
+	};
 
 	enum AttributeType : WORD {
 		AttributeType_None = 0,
@@ -147,13 +160,13 @@ namespace S1DataCenter {
 	};
 
 	//DCArray
-	template<typename T, bool isPrimitive = false, bool hasMaxCount = false>
+	template<typename T, bool IsBlockArray = false, size_t BasePaddCount = 0>
 	struct DCArray : DCSerializable {
 		typedef void(*CallbackPtr)(void*, T*);
 
 		std::vector<T>		Data;
 		UINT32				MaxCount = 0;
-		INT					MinCount = -1;
+		UINT32				UsedCount = 0;
 		TRef<void>			Parent = nullptr;
 		CallbackPtr			Callback = nullptr;
 
@@ -161,36 +174,46 @@ namespace S1DataCenter {
 		DCArray(DCArray&& other)noexcept {
 			Data = std::move(other.Data);
 			MaxCount = other.MaxCount;
-			MinCount = other.MinCount;
+			UsedCount = other.UsedCount;
 			Parent = other.Parent;
 			Callback = other.Callback;
 
+			other.UsedCount = 0;
 			other.MaxCount = 0;
 		}
 
 		virtual bool Serialize(FIStream& Stream) override {
-			INT StartI = MinCount < 0 ? 0 : MinCount;
-
 			if (Stream.IsLoading()) {
 				Data.clear();
 
-				UINT32 Count = Stream.ReadUInt32();
-
-				if constexpr (hasMaxCount) {
+				if constexpr (IsBlockArray) {
 					MaxCount = Stream.ReadUInt32();
 				}
 				else {
 					MaxCount = 0;
 				}
 
-				//if ((INT)Count > MinCount) {
-				Data.reserve(Count);
+				UsedCount = Stream.ReadUInt32() - BasePaddCount;
 
-				for (size_t i = StartI; i < Count; i++)
+				if constexpr (IsBlockArray) {
+					if (UsedCount > MaxCount) {
+						Message("Wrong BlockArray sizes Count:%d MaxCount:%d", UsedCount, MaxCount);
+					}
+				}
+
+				Data.reserve(UsedCount);
+
+				for (size_t i = 0; i < UsedCount; i++)
 				{
 					auto OldPos = Stream._pos;
 
-					if constexpr (isPrimitive) {
+					if constexpr (!IsBlockArray) {
+						if (i == 156) {
+							i = i;
+						}
+					}
+
+					if constexpr (std::is_fundamental<T>::value) {
 						T Value = ReadScalar(Stream);
 
 						Data.push_back(T);
@@ -210,39 +233,33 @@ namespace S1DataCenter {
 						Data.push_back(std::move(Object));
 					}
 				}
-				//}
+
+				if constexpr (IsBlockArray) {
+					const size_t PaddCount = (size_t)MaxCount - (size_t)UsedCount;
+
+					for (size_t i = 0; i < PaddCount; i++) {
+						T Object;
+
+						if (!Object.Serialize(Stream)) {
+							return false;
+						}
+
+						//Data.push_back(std::move(Object));
+					}
+				}
 			}
 			else {
-				Stream.WriteUInt32((UINT32)Data.size() + StartI);
-
-				if constexpr (hasMaxCount) {
+				if constexpr (IsBlockArray) {
 					Stream.WriteUInt32(MaxCount);
 				}
 
-				//Serialize unread data 
-				for (size_t i = 0; i < StartI; i++)
+				Stream.WriteUInt32(UsedCount + BasePaddCount);
+
+				for (size_t i = 0; i < Data.size(); i++)
 				{
 					auto OldPos = Stream._pos;
 
-					if constexpr (isPrimitive) {
-						WriteScalar(Stream, T());
-					}
-					else {
-						T Default;
-
-						if (!Default.Serialize(Stream)) {
-							Message("Error while serializing DCArray Item at position %d [isLoading=%d]", OldPos, (int)Stream.IsLoading());
-							return false;
-						}
-					}
-				}
-
-				//if ((INT)Data.size() > MinCount) {
-				for (size_t i = StartI; i < Data.size(); i++)
-				{
-					auto OldPos = Stream._pos;
-
-					if constexpr (isPrimitive) {
+					if constexpr (std::is_fundamental<T>::value) {
 						WriteScalar(Stream, Data[i]);
 					}
 					else {
@@ -252,7 +269,20 @@ namespace S1DataCenter {
 						}
 					}
 				}
-				//}
+
+				if constexpr (IsBlockArray) {
+					const size_t PaddCount = (size_t)MaxCount - (size_t)UsedCount;
+
+					for (size_t i = 0; i < PaddCount; i++) {
+						T DefaultObject;
+
+						if (!DefaultObject.Serialize(Stream)) {
+							return false;
+						}
+
+						//Data.push_back(std::move(Object));
+					}
+				}
 			}
 
 			return true;
@@ -260,15 +290,22 @@ namespace S1DataCenter {
 		void operator =(DCArray& other) {
 			Data = std::move(other.Data);
 			MaxCount = other.MaxCount;
-			MinCount = other.MinCount;
+			UsedCount = other.UsedCount;
 			Parent = other.Parent;
 			Callback = other.Callback;
 
+			other.UsedCount = 0;
 			other.MaxCount = 0;
 		}
 
 		T& operator[](INT I) noexcept {
 			return Data[I];
+		}
+
+		void Clear()noexcept {
+			Data.clear();
+			UsedCount = 0;
+			MaxCount = 0;
 		}
 
 	private:
@@ -285,28 +322,28 @@ namespace S1DataCenter {
 	};
 
 	template<typename T>
-	struct DCPrimitiveArray : DCArray<T, true> {};
+	using DCBlockArray = DCArray<T, true>;
 
-	template<typename T, bool isPrimitive = false>
-	struct MaxCountDCArray : DCArray<T, isPrimitive, true> {};
+	template<typename T>
+	using DCPaddedArray = DCArray<T, false, 1>;
 
 	//String Blocks
 	struct StringBlock : DCSerializable {
 		TRef<wchar_t>	Block = nullptr;
 		INT				BlockSize = 0;
-		INT				MaxCount = 0;
+		INT				UsedSize = 0;
 
 		StringBlock() {}
 		StringBlock(StringBlock&& other)noexcept {
 			Block = other.Block.Release();
 			BlockSize = other.BlockSize;
-			MaxCount = other.MaxCount;
+			UsedSize = other.UsedSize;
 		}
 
 		virtual bool Serialize(FIStream& Stream) override {
 			if (Stream.IsLoading()) {
 				BlockSize = Stream.ReadInt32();
-				MaxCount = Stream.ReadInt32();
+				UsedSize = Stream.ReadInt32();
 
 				Block = new wchar_t[BlockSize];
 
@@ -314,13 +351,14 @@ namespace S1DataCenter {
 			}
 			else {
 				Stream.WriteInt32(BlockSize);
-				Stream.WriteInt32(MaxCount);
+				Stream.WriteInt32(UsedSize);
 
 				Stream.Write((UINT8*)Block.Get(), BlockSize * 2);
 			}
 
 			return true;
 		};
+
 		~StringBlock() {
 			if (Block.Get()) {
 				delete[] Block.Get();
@@ -422,6 +460,14 @@ namespace S1DataCenter {
 			return Blocks.Get() ? &Blocks->Data[Index] : nullptr;
 		}
 
+		void Clear() noexcept {
+			if (Buckets.Get())
+			{
+				delete[] Buckets.Get();
+				Buckets = nullptr;
+			}
+		}
+
 		~DCBuckets() {
 			if (Buckets.Get())
 			{
@@ -438,8 +484,8 @@ namespace S1DataCenter {
 			DWORD							Id;
 			std::pair<WORD, WORD>			Indices;
 
+			//Ref
 			TRef<const wchar_t>				CachedString = nullptr;
-
 			TRef<DCStringBlocks>			Blocks = nullptr;
 
 			BucketElement() {
@@ -530,9 +576,9 @@ namespace S1DataCenter {
 	struct DCMap : DCSerializable {
 		struct StringEntry : DCSerializable {
 			std::pair<WORD, WORD>			Indices = { 0,0 };
-			TRef<const wchar_t>				CachedString = nullptr;
 
 			//Ref
+			TRef<const wchar_t>				CachedString = nullptr;
 			TRef<DCStringBlocks>			Blocks = nullptr;
 
 			StringEntry() {}
@@ -565,16 +611,16 @@ namespace S1DataCenter {
 			}
 		};
 
-		DCStringBlocks			StringBlocks;
-		DCStringsBuckets		Buckets;
-		DCArray<StringEntry>	AllStrings;
+		DCStringBlocks				StringBlocks;
+		DCStringsBuckets			Buckets;
+		DCPaddedArray<StringEntry>	AllStrings;
 
 		DCMap() {
 			Buckets.Blocks = &StringBlocks;
 
 			AllStrings.Parent = this;
-			AllStrings.Callback = (DCArray<StringEntry>::CallbackPtr)PrepareItem;
-			AllStrings.MinCount = 1;
+			AllStrings.Callback = (DCPaddedArray<StringEntry>::CallbackPtr)PrepareItem;
+			//AllStrings.MinCount = 1;
 		}
 
 		virtual bool Serialize(FIStream& Stream) override {
@@ -593,9 +639,16 @@ namespace S1DataCenter {
 			return true;
 		}
 		const wchar_t* GetString(WORD BlockIndex, WORD StringIndex) {
-			return &(StringBlocks[BlockIndex].Block.Get())[StringIndex];
+			const wchar_t* Block = StringBlocks[BlockIndex].Block.Get();
+
+			return &Block[StringIndex];
 		}
 
+		void Clear() noexcept {
+			StringBlocks.Clear();
+			Buckets.Clear();
+			AllStrings.Clear();
+		}
 	private:
 		static void PrepareItem(DCMap* This, StringEntry* Item) {
 			Item->Blocks = &This->StringBlocks;
@@ -709,6 +762,14 @@ namespace S1DataCenter {
 		DCArray<Unk3Unk1_Item>				Unk3Unk1;
 		DCArray<Unk3Unk3Unk1_Item>			Unk3Unk3;
 
+		void Clear() noexcept {
+			Unk1 = 0;
+			Unk2 = 0;
+			Unk3 = 0;
+			Unk3Unk1.Clear();
+			Unk3Unk3.Clear();
+		}
+
 		virtual bool Serialize(FIStream& Stream) override {
 			if (Stream.IsLoading()) {
 
@@ -737,7 +798,7 @@ namespace S1DataCenter {
 
 	struct AttributeItem : DCSerializable {
 		WORD							NameId = 0;
-		WORD							TypeInfo = 0;
+		AttributeType					TypeInfo = AttributeType_None;
 
 		union {
 			struct {
@@ -790,6 +851,10 @@ namespace S1DataCenter {
 		virtual bool Serialize(FIStream& Stream) override {
 			if (Stream.IsLoading()) {
 				NameId = Stream.ReadUInt16();
+				/*if (!NameId) {
+					Message("read attribute with nameId 0??");
+				}*/
+
 				TypeInfo = (AttributeType)Stream.ReadUInt16();
 
 				Indices.first = Stream.ReadUInt16();
@@ -844,25 +909,29 @@ namespace S1DataCenter {
 	};
 
 	struct ElementItem : DCSerializable {
-		UINT16						Name = 0;
-		UINT16						Index = 0;
-		UINT16						ArgsCount = 0;
-		UINT16						ChildCount = 0;
-		std::pair<WORD, WORD>		ArgsIndices = { 0,0 };
-		std::pair<WORD, WORD>		ChildrenIndices = { 0,0 };
+		WORD								Name = 0;
+		WORD								Index = 0;
+		WORD								ArgsCount = 0;
+		WORD								ChildCount = 0;
+		std::pair<WORD, WORD>				ArgsIndices = { UINT16_MAX,UINT16_MAX };
+		std::pair<WORD, WORD>				ChildrenIndices = { UINT16_MAX,UINT16_MAX };
 
 #if DC_64
-		DWORD						Padd1 = 0;
-		DWORD						Padd2 = 0;
+		DWORD								Padd1 = 0;
+		DWORD								Padd2 = 0;
 #endif
 
-		TRef<const wchar_t>			NameRef = nullptr;
-		TRef<const AttributeItem>	Arguments = nullptr;
-		TRef<const ElementItem>		Children = nullptr;
+		//Cached
+		TRef<const wchar_t>					NameRef = nullptr;
+		std::vector<const AttributeItem*>	Arguments;
+		std::vector<const ElementItem*>		Children;
 
 		ElementItem() {}
 		ElementItem(const ElementItem& other) {
 			Name = other.Name;
+
+			//Message("Element: nameId:%hd", Name);
+
 			Index = other.Index;
 			ChildCount = other.ChildCount;
 			ArgsCount = other.ArgsCount;
@@ -939,58 +1008,26 @@ namespace S1DataCenter {
 			Children = other.Children;
 		}
 
-		void MessageThis() {
-			if (!Arguments.Get() && !NameRef.Get()) {
-				return;
-			}
+		std::vector<const ElementItem*> GetChildren(const struct S1DataCenter* DC) const noexcept;
 
-			if (NameRef.Get() && !Arguments.Get()) {
-				Message("Element Name=%ws Value is null", NameRef.Get());
-			}
-			else if (NameRef.Get() && Arguments.Get()) {
-				if (Arguments->IsInt()) {
-					Message("Element Name=%ws Value=%d", NameRef.Get(), Arguments->IntValue);
-				}
-				else if (Arguments->IsFloat()) {
-					Message("Element Name=%ws Value=%f", NameRef.Get(), Arguments->FloatValue);
-				}
-				else if (Arguments->StringRef.Get()) {
-					Message("Element Name=%ws Value=%ws", NameRef.Get(), Arguments->StringRef.Get());
-				}
-				else {
-					Message("Element Name=%ws String is null", NameRef.Get());
-				}
-			}
-			else if(Arguments.Get()){
-				if (Arguments->IsInt()) {
-					Message("Element Value=%d", Arguments->IntValue);
-				}
-				else if (Arguments->IsFloat()) {
-					Message("Element Value=%f", Arguments->FloatValue);
-				}
-				else if (Arguments->StringRef.Get()) {
-					Message("Element Value=%ws", Arguments->StringRef.Get());
-				}
-				else {
-					Message("Invalid Element");
-				}
-			}
+		void MessageThis() {
+
 		}
 	};
 
 	struct S1DataCenter : DCSerializable {
-		INT											FormatVersion = 0;
-		UINT64										Unk1_8 = 0;
-		INT											Version = 0;
+		INT												FormatVersion = 0;
+		UINT64											Unk1_8 = 0;
+		INT												Version = 0;
 
-		UnkTree										Unk;
-		DCArray<DCIndex>							Indices;
-		DCArray<MaxCountDCArray<AttributeItem>>		Attributes;
-		DCArray<MaxCountDCArray<ElementItem>>		Elements;
-		DCMap										ValuesMap;
-		DCMap										NamesMap;
+		UnkTree											Unk;
+		DCArray<DCIndex>								Indices;
+		DCArray<DCBlockArray<AttributeItem>>			Attributes;
+		DCArray<DCBlockArray<ElementItem>>				Elements;
+		DCMap											ValuesMap;
+		DCMap											NamesMap;
 
-		DWORD										EndCount = 0;
+		DWORD											EndCount = 0;
 
 		S1DataCenter() {
 			ValuesMap.Buckets.Count = 1024;
@@ -999,10 +1036,69 @@ namespace S1DataCenter {
 
 		virtual bool Serialize(FIStream& Stream) override;
 
+		TRef<const ElementItem> GetRootElement() {
+			return &Elements.Data[0].Data[0];
+		}
+
 		bool Prepare();
+		void Clear() {
+			Unk.Clear();
+			Indices.Clear();
+			Attributes.Clear();
+			Elements.Clear();
+			ValuesMap.Clear();
+			NamesMap.Clear();
+
+			bIsLoaded = false;
+			state = DCState::Idle;
+		}
+
+		inline const char* GetDCToolStateStr()noexcept {
+			/*switch (state)
+			{
+			case DCState::Idle:
+				return "Idle";
+			case DCState::Serializing:
+				return "Serializing";
+			case DCState::Preparing:
+				return "Preparing";
+			case DCState::Dumping:
+				return "Dumping";
+			}*/
+
+			return bIsLoaded ? "Loaded" : "Not Loaded";
+		}
+
+		bool IsLoaded() const noexcept {
+			return bIsLoaded;
+		}
+
+		void BuildDCExportName(std::string& str) const noexcept {
+			str += "DC_";
+			str += std::to_string(Version);
+		}
 
 	private:
+		bool bIsLoaded = false;
+		DCState state = DCState::Idle;
+
 		bool PrepareAttributes();
 		bool PrepareElements();
+
+		template<DCState StartState, DCState ExitState> friend struct StateGuard;
 	};
+
+	template<DCState StartState, DCState ExitState>
+	inline StateGuard<StartState, ExitState>::StateGuard(S1DataCenter* dc)
+	{
+		this->dc = dc;
+		dc->state = StartState;
+	}
+
+	template<DCState StartState, DCState ExitState>
+	inline StateGuard<StartState, ExitState>::~StateGuard()
+	{
+		dc->state = ExitState;
+		dc = nullptr;
+	}
 }

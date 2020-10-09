@@ -4,11 +4,12 @@ DWORD appStrihash(const TCHAR* Data);
 
 bool S1DataCenter::S1DataCenter::Serialize(FIStream& Stream)
 {
+	StateGuard<DCState::Serializing> stateGuard(this);
+
 	if (Stream.IsLoading()) {
 		FormatVersion = Stream.ReadInt32();
 		Unk1_8 = Stream.ReadInt64();
 		Version = Stream.ReadInt32();
-
 	}
 	else {
 		Stream.WriteInt32(FormatVersion);
@@ -47,80 +48,98 @@ bool S1DataCenter::S1DataCenter::Serialize(FIStream& Stream)
 		Stream.WriteUInt32(EndCount);
 	}
 
+	if (Stream.IsLoading()) {
+		bIsLoaded = true;
+	}
+
 	return true;
 }
 
 bool S1DataCenter::S1DataCenter::Prepare()
 {
-	if (Attributes.Data.size()) {
-		for (size_t i = 0; i < Attributes.Data.size(); i++)
-		{
-			if (Attributes[i].Data.size()) {
-				for (size_t j = 0; j < Attributes[i].Data.size(); j++)
-				{
-					if (Attributes[i].Data[j].IsString()) {
+	StateGuard<DCState::Preparing> stateGuard(this);
 
-						const auto* String = ValuesMap.GetString(Attributes[i].Data[j].Indices.first, Attributes[i].Data[j].Indices.second);
-
-						Attributes[i].Data[j].StringRef = String;
-					}
-					else {
-						Attributes[i].Data[j].StringRef = nullptr;
-					}
-
-					Attributes[i].Data[j].NameRef = NamesMap.AllStrings[Attributes[i].Data[j].NameId].CachedString;
-
-					Attributes[i].Data[j].MessageThis();
-				}
-			}
-		}
+	if (!PrepareAttributes()) {
+		return false;
 	}
 
-	if (Elements.Data.size()) {
-		for (size_t i = 0; i < Elements.Data.size(); i++)
-		{
-			if (Elements.Data[i].Data.size()) {
-				for (size_t j = 0; j < Elements.Data[i].Data.size(); j++)
-				{
-					auto& Data = Elements.Data[i].Data[j];
-
-					Data.NameRef = NamesMap.AllStrings[Data.Name].CachedString;
-
-					if (Data.ArgsIndices.first != UINT16_MAX || Data.ArgsIndices.second != UINT16_MAX) {
-						Data.Arguments = &Attributes[Data.ArgsIndices.first].Data[Data.ArgsIndices.second];
-					}
-					else {
-						Data.Arguments = nullptr;
-					}
-
-					if (Data.ChildrenIndices.first != UINT16_MAX && Data.ChildrenIndices.second != UINT16_MAX) {
-						Data.Children = &Elements.Data[Data.ChildrenIndices.first].Data[Data.ChildrenIndices.second];
-					}
-					else {
-						Data.Children = nullptr;
-					}
-
-					Data.MessageThis();
-				}
-			}
-		}
+	if (!PrepareElements()) {
+		return false;
 	}
-
-	DWORD Hash = 0;
-	const auto& Item2 = ValuesMap.Buckets.GetElementEx(L"StrSheet_SystemMessage", Hash);
 
 	return true;
 }
 
 bool S1DataCenter::S1DataCenter::PrepareAttributes()
 {
+	for (auto& AttributesBlock : Attributes.Data) {
 
+		for (auto& Attribute : AttributesBlock.Data) {
+			if (Attribute.IsString()) {
+				Attribute.StringRef = ValuesMap.GetString(Attribute.Indices.first, Attribute.Indices.second);
+			}
+			else {
+				Attribute.StringRef = nullptr;
+			}
+			if (Attribute.NameId) {
+				Attribute.NameRef = NamesMap.AllStrings[Attribute.NameId - 1].CachedString;
+			}
+			else {
+				Message("Attribute with name Id 0 ??");
+			}
+		}
 
+	}
 
 	return true;
 }
 
 bool S1DataCenter::S1DataCenter::PrepareElements()
 {
-	return false;
+	for (auto& ElementsBlock : Elements.Data) {
+
+		for (auto& Element : ElementsBlock.Data) {
+
+			auto [pageIndex, pageOffset] = NamesMap.AllStrings.Data[Element.Name - 1].Indices;
+			Element.NameRef = NamesMap.GetString(pageIndex, pageOffset);
+
+			if (Element.ArgsCount) {
+				for (int Index = 0; Index < Element.ArgsCount; Index++)
+				{
+					AttributeItem* SubAttributes = &(Attributes.Data[Element.ArgsIndices.first].Data[Element.ArgsIndices.second]);
+					Element.Arguments.push_back(SubAttributes + Index);
+				}
+			}
+
+			if (Element.ChildCount) {
+				for (int Index = 0; Index < Element.ChildCount; Index++)
+				{
+					ElementItem* SubElements = &(Elements.Data[Element.ChildrenIndices.first].Data[Element.ChildrenIndices.second]);
+					Element.Children.push_back(SubElements + Index);
+				}
+			}
+
+			//Message("Element [name=%ws childCount=%lld argsCount=%lld]", Element.NameRef.Get(), Element.Children.size(), Element.Arguments.size());
+		}
+	}
+
+	return true;
+}
+
+std::vector<const S1DataCenter::ElementItem*> S1DataCenter::ElementItem::GetChildren(const S1DataCenter* DC) const noexcept
+{
+	std::vector<const ElementItem*> Out;
+
+	if (!ChildCount) {
+		return std::move(Out);
+	}
+
+	const auto* Start = &DC->Elements.Data[ChildrenIndices.first].Data[ChildrenIndices.second];
+
+	for (size_t i = 0; i < ChildCount; i++)
+	{
+		Out.push_back(Start + i);
+	}
+
+	return std::move(Out);
 }

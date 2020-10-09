@@ -3,6 +3,8 @@
 #define _USE_MATH_DEFINES
 #define _CRT_SECURE_NO_WARNINGS
 
+//#define DC_64 0
+
 #include <math.h>
 #include <algorithm>
 #include <fvec.h>
@@ -10,6 +12,8 @@
 #include <ctype.h>
 
 #include "typedefs.h"
+
+#include "RapidXML/rapidxml.hpp"
 
 #define isZero(v) (v.x == 0.0f && v.y == 0.0f && v.z == 0.0f)
 

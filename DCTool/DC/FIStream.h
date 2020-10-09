@@ -19,7 +19,7 @@ struct FIStream
 	~FIStream();
 
 	bool				load_from_file(const char*);
-	void				save_to_file(const char*);
+	bool				save_to_file(const char*);
 
 
 	//WRITE_*******************************************************

@@ -12,7 +12,7 @@ int WINAPI WinMain(
 	int width = 1280, height = 720;
 	GetDesktopResolution(width, height);
 
-	int Result = GApp.Initialize(hInstance, width, height, nShowCmd);
+	int Result = GApp.Initialize(hInstance, 1024, 768, nShowCmd);
 	if (Result) {
 		Message("Initialization failed");
 		return 1;

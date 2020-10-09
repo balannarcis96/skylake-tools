@@ -48,3 +48,6 @@ Recast/resources/
 libs/zlib/Src/projects/
 libs/zlib/Src/msdos/
 libs/zlib/Src/examples/
+/MapReaderV2/resources
+/.vs/MapReaderV2/v16
+/.vs/MapReaderV2/config

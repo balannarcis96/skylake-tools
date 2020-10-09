@@ -65,7 +65,7 @@ FIStream::~FIStream()
 
 bool FIStream::load_from_file(const char *file){
 	Clear();
-	std::ifstream f = std::ifstream(file, std::ios::binary);
+	std::ifstream f = std::ifstream(file, std::fstream::binary);
 	if (!f.is_open())
 		return  false;
 	if (!f.good()) {
@@ -88,15 +88,19 @@ bool FIStream::load_from_file(const char *file){
 	return true;
 }
 
-void FIStream::save_to_file(const char * fileName)
+bool FIStream::save_to_file(const char * fileName)
 {
-	std::ofstream file = std::ofstream(fileName, std::ios::binary | std::ios::out);
+	std::ofstream file;
+	file.open(fileName, std::fstream::binary | std::fstream::out | std::fstream::trunc);
 	if (!file.is_open()) {
-		return;
+		return false;
 	}
 
 	file.write((const char*)_raw, _size);
+
 	file.close();
+
+	return true;
 }
 
 

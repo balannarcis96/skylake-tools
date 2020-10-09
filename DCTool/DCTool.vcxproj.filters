@@ -173,5 +173,17 @@
     <ClInclude Include="DC\DCAdaptors.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="RapidXML\rapidxml.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="RapidXML\rapidxml_iterators.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="RapidXML\rapidxml_print.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="RapidXML\rapidxml_utils.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
