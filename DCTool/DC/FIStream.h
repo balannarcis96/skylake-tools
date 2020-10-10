@@ -19,8 +19,9 @@ struct FIStream
 	~FIStream();
 
 	bool				load_from_file(const char*);
+	bool				load_from_file(const wchar_t* file);
 	bool				save_to_file(const char*);
-
+	bool				save_to_file(const wchar_t* fileName);
 
 	//WRITE_*******************************************************
 	void				Resize(u_int64 size);

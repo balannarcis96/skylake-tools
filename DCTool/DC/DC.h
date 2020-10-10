@@ -31,6 +31,8 @@ struct DCTool : UIElement<UIElementType::DC> {
 		//strcpy_s(FileName, "DC.bin");
 		strcpy_s(FileName, "DataCenter_Final_TW.366226.unpacked");
 		strcpy_s(SaveFileName, "Saved_32.bin");
+		strcpy_s(ImportBasePath, "C:/DC_366226/");
+		wcscpy_s(ExportBasePath, L"C:/");
 	}
 
 	void GetKey(uint8_t OutKey[16])const noexcept {
@@ -52,6 +54,10 @@ private:
 	bool						Encrypt = false;
 	bool						Compress = false;
 	char						SaveFileName[1024];
+	wchar_t						ExportBasePath[MAX_PATH];
+	char						ImportBasePath[MAX_PATH];
+	
+	INT							DCFilesType = 0;
 
 	char						Key[33] = EU_9303_KEY;
 	char						IV[33] = EU_9303_IV;

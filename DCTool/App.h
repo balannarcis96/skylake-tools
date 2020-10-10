@@ -13,7 +13,7 @@
 
 #include "typedefs.h"
 
-#include "RapidXML/rapidxml.hpp"
+#include "RapidXML/rapidxml_print.hpp"
 
 #define isZero(v) (v.x == 0.0f && v.y == 0.0f && v.z == 0.0f)
 

@@ -2,6 +2,17 @@
 
 namespace S1DataCenter {
 
+	constexpr size_t			CElementsBlockSize = 65536;
+
+#if DC_64
+	constexpr size_t			CAttributeSize = 12;
+	constexpr size_t			CElementSize = 24;
+#else
+	constexpr size_t			CAttributeSize = 8;
+	constexpr size_t			CElementSize = 16;
+#endif
+
+
 	enum class DCState {
 		Idle,
 		Serializing,
@@ -160,127 +171,43 @@ namespace S1DataCenter {
 	};
 
 	//DCArray
-	template<typename T, bool IsBlockArray = false, size_t BasePaddCount = 0>
+	template<typename T, size_t BasePadd = 0>
 	struct DCArray : DCSerializable {
-		typedef void(*CallbackPtr)(void*, T*);
-
 		std::vector<T>		Data;
-		UINT32				MaxCount = 0;
-		UINT32				UsedCount = 0;
-		TRef<void>			Parent = nullptr;
-		CallbackPtr			Callback = nullptr;
+		UINT32				Count = 0;
 
 		DCArray() {}
 		DCArray(DCArray&& other)noexcept {
 			Data = std::move(other.Data);
-			MaxCount = other.MaxCount;
-			UsedCount = other.UsedCount;
-			Parent = other.Parent;
-			Callback = other.Callback;
+			Count = other.Count;
 
-			other.UsedCount = 0;
-			other.MaxCount = 0;
+			other.Count = 0;
 		}
 
 		virtual bool Serialize(FIStream& Stream) override {
 			if (Stream.IsLoading()) {
-				Data.clear();
+				Count = Stream.ReadUInt32() - BasePadd;
 
-				if constexpr (IsBlockArray) {
-					MaxCount = Stream.ReadUInt32();
-				}
-				else {
-					MaxCount = 0;
-				}
+				Data.reserve(Count);
 
-				UsedCount = Stream.ReadUInt32() - BasePaddCount;
-
-				if constexpr (IsBlockArray) {
-					if (UsedCount > MaxCount) {
-						Message("Wrong BlockArray sizes Count:%d MaxCount:%d", UsedCount, MaxCount);
-					}
-				}
-
-				Data.reserve(UsedCount);
-
-				for (size_t i = 0; i < UsedCount; i++)
+				for (size_t i = 0; i < Count; i++)
 				{
-					auto OldPos = Stream._pos;
+					T Object;
 
-					if constexpr (!IsBlockArray) {
-						if (i == 156) {
-							i = i;
-						}
+					if (!Object.Serialize(Stream)) {
+						continue;
 					}
 
-					if constexpr (std::is_fundamental<T>::value) {
-						T Value = ReadScalar(Stream);
-
-						Data.push_back(T);
-					}
-					else {
-						T Object;
-
-						if (Callback) {
-							Callback(Parent.Get(), &Object);
-						}
-
-						if (!Object.Serialize(Stream)) {
-							Message("Error while serializing DCArray Item at position %d [isLoading=%d]", OldPos, (int)Stream.IsLoading());
-							return false;
-						}
-
-						Data.push_back(std::move(Object));
-					}
-				}
-
-				if constexpr (IsBlockArray) {
-					const size_t PaddCount = (size_t)MaxCount - (size_t)UsedCount;
-
-					for (size_t i = 0; i < PaddCount; i++) {
-						T Object;
-
-						if (!Object.Serialize(Stream)) {
-							return false;
-						}
-
-						//Data.push_back(std::move(Object));
-					}
+					Data.push_back(std::move(Object));
 				}
 			}
 			else {
-				if constexpr (IsBlockArray) {
-					Stream.WriteUInt32(MaxCount);
-				}
-
-				Stream.WriteUInt32(UsedCount + BasePaddCount);
+				Stream.WriteUInt32(Count + BasePadd);
 
 				for (size_t i = 0; i < Data.size(); i++)
 				{
-					auto OldPos = Stream._pos;
-
-					if constexpr (std::is_fundamental<T>::value) {
-						WriteScalar(Stream, Data[i]);
-					}
-					else {
-						if (!Data[i].Serialize(Stream)) {
-							Message("Error while serializing DCArray Item at position %d [isLoading=%d]", OldPos, (int)Stream.IsLoading());
-							return false;
-						}
-					}
-				}
-
-				if constexpr (IsBlockArray) {
-					const size_t PaddCount = (size_t)MaxCount - (size_t)UsedCount;
-
-					for (size_t i = 0; i < PaddCount; i++) {
-						T DefaultObject;
-
-						if (!DefaultObject.Serialize(Stream)) {
-							return false;
-						}
-
-						//Data.push_back(std::move(Object));
+					if (!Data[i].Serialize(Stream)) {
+						return false;
 					}
 				}
 			}
@@ -289,17 +216,78 @@ namespace S1DataCenter {
 		}
 		void operator =(DCArray& other) {
 			Data = std::move(other.Data);
+			Count = other.Count;
+
+			other.UsedCount = 0;
+		}
+
+		void Clear()noexcept {
+			Data.clear();
+			Count = 0;
+		}
+	};
+
+	template<typename T, size_t ElementSize>
+	struct DCBlockArray : DCSerializable {
+		std::vector<T>		Data;
+		UINT				UsedCount = 0;
+		UINT				MaxCount = 0;
+
+		virtual bool Serialize(FIStream& Stream) override {
+			if (Stream.IsLoading()) {
+
+				MaxCount = Stream.ReadUInt32();
+				UsedCount = Stream.ReadUInt32();
+
+				Data.reserve(UsedCount);
+
+				for (size_t i = 0; i < UsedCount; i++)
+				{
+					T Object;
+
+					if (!Object.Serialize(Stream)) {
+						continue;
+					}
+
+					Data.push_back(std::move(Object));
+				}
+			}
+			else {
+				for (size_t i = 0; i < UsedCount; i++)
+				{
+					if (!Data[i].Serialize(Stream)) {
+						return false;
+					}
+				}
+			}
+
+			const size_t Remaining = MaxCount - UsedCount;
+			if (Stream.IsLoading())
+			{
+				if (Remaining) {
+					Stream._pos += Remaining * ElementSize;
+				}
+			}
+			else {
+				T DefaultObject;
+
+				for (size_t i = 0; i < Remaining; i++) {
+					if (!DefaultObject.Serialize(Stream)) {
+						return false;
+					}
+				}
+			}
+
+			return true;
+		}
+
+		void operator =(DCBlockArray& other) {
+			Data = std::move(other.Data);
 			MaxCount = other.MaxCount;
 			UsedCount = other.UsedCount;
-			Parent = other.Parent;
-			Callback = other.Callback;
 
 			other.UsedCount = 0;
 			other.MaxCount = 0;
-		}
-
-		T& operator[](INT I) noexcept {
-			return Data[I];
 		}
 
 		void Clear()noexcept {
@@ -308,24 +296,10 @@ namespace S1DataCenter {
 			MaxCount = 0;
 		}
 
-	private:
-		T ReadScalar(FIStream& Stream) {
-			char Value[sizeof(T)];
-
-			Stream.Read((UINT8*)Value, sizeof(T));
-
-			return *((T*)Value);
-		}
-		T WriteScalar(FIStream& Stream, T Value) {
-			Stream.Write((UINT8*)&Value, sizeof(T));
+		bool CanWrite(size_t Count = 1)const noexcept {
+			return MaxCount - UsedCount <= Count;
 		}
 	};
-
-	template<typename T>
-	using DCBlockArray = DCArray<T, true>;
-
-	template<typename T>
-	using DCPaddedArray = DCArray<T, false, 1>;
 
 	//String Blocks
 	struct StringBlock : DCSerializable {
@@ -347,13 +321,13 @@ namespace S1DataCenter {
 
 				Block = new wchar_t[BlockSize];
 
-				Stream.Read((UINT8*)Block.Get(), BlockSize * 2);
+				Stream.Read((UINT8*)Block.Get(), (size_t)BlockSize * 2);
 			}
 			else {
 				Stream.WriteInt32(BlockSize);
 				Stream.WriteInt32(UsedSize);
 
-				Stream.Write((UINT8*)Block.Get(), BlockSize * 2);
+				Stream.Write((UINT8*)Block.Get(), (size_t)BlockSize * 2);
 			}
 
 			return true;
@@ -367,13 +341,16 @@ namespace S1DataCenter {
 		}
 	};
 
-	typedef DCArray<StringBlock> DCStringBlocks;
+	using DCStringBlocks = DCArray<StringBlock>;
+
+	template<typename T>
+	using DCPaddedArray = DCArray<T, 1>;
 
 	//Buckets
 	template<typename T>
 	struct DCBuckets : DCSerializable {
 		DWORD										Count = 0;
-		TRef<T>										Buckets = nullptr;
+		std::vector<T>								Buckets;
 
 		TRef<DCStringBlocks>						Blocks = nullptr;
 
@@ -381,25 +358,27 @@ namespace S1DataCenter {
 			if (!Count) {
 				return true;
 			}
-			if (Stream.IsLoading()) {
-				std::unique_ptr<T[]> TempBuckets = nullptr;
 
-				TempBuckets = std::unique_ptr<T[]>(new T[Count]);
+			if (Stream.IsLoading()) {
+				Buckets.reserve(Count);
+
 				for (size_t i = 0; i < Count; i++)
 				{
-					TempBuckets[i].Blocks = Blocks;
+					T Bucket;
 
-					if (!TempBuckets[i].Serialize(Stream)) {
+					Bucket.Blocks = Blocks;
+
+					if (!Bucket.Serialize(Stream)) {
 						return false;
 					}
-				}
 
-				Buckets = TempBuckets.release();
+					Buckets.push_back(std::move(Bucket));
+				}
 			}
 			else {
 				for (size_t i = 0; i < Count; i++)
 				{
-					if (!(Buckets.Get())[i].Serialize(Stream)) {
+					if (!Buckets[i].Serialize(Stream)) {
 						return false;
 					}
 				}
@@ -412,13 +391,13 @@ namespace S1DataCenter {
 			const auto Hash = MapString(string);
 			const auto Index = GetMappedIndex(Hash, Count);
 
-			return (Buckets.Get())[Index];
+			return Buckets[Index];
 		}
 		inline const wchar_t* GetElement(const wchar_t* string) const noexcept {
 			const auto Hash = Crc32(string);
 			const auto Index = GetMappedIndex(Hash, Count);
 
-			return (Buckets.Get())[Index].GetElement(Hash);
+			return Buckets[Index].GetElement(Hash);
 		}
 		inline const T& GetElementEx(const wchar_t* Data, DWORD& OutHash) const noexcept {
 			OutHash = 0;
@@ -450,30 +429,18 @@ namespace S1DataCenter {
 
 			const DWORD Index = (((OutHash >> 16) ^ OutHash) & (Count - 1));
 
-			return (Buckets.Get())[Index];
+			return Buckets[Index];
 		}
 
 		inline const TRef<T> GetBucket(INT Index)const noexcept {
-			return Buckets.Get() ? &(Buckets.Get())[Index] : nullptr;
+			return Buckets.size() ? &Buckets[Index] : nullptr;
 		}
 		inline const TRef<StringBlock> GetStringBlock(INT Index)const noexcept {
 			return Blocks.Get() ? &Blocks->Data[Index] : nullptr;
 		}
 
 		void Clear() noexcept {
-			if (Buckets.Get())
-			{
-				delete[] Buckets.Get();
-				Buckets = nullptr;
-			}
-		}
-
-		~DCBuckets() {
-			if (Buckets.Get())
-			{
-				delete[] Buckets.Get();
-				Buckets = nullptr;
-			}
+			Buckets.clear();
 		}
 	};
 
@@ -486,13 +453,34 @@ namespace S1DataCenter {
 
 			//Ref
 			TRef<const wchar_t>				CachedString = nullptr;
-			TRef<DCStringBlocks>			Blocks = nullptr;
 
 			BucketElement() {
 				Hash = 0;
 				Length = 0;
 				Id = 0;
 				Indices = { 0,0 };
+			}
+			BucketElement(const BucketElement& Other) noexcept {
+				Hash = Other.Hash;
+				Length = Other.Length;
+				Id = Other.Id;
+				Indices = Other.Indices;
+
+				CachedString = Other.CachedString;
+			}
+			BucketElement& operator=(const BucketElement& Other) noexcept {
+				if (&Other == this) {
+					return *this;
+				}
+
+				Hash = Other.Hash;
+				Length = Other.Length;
+				Id = Other.Id;
+				Indices = Other.Indices;
+
+				CachedString = Other.CachedString;
+
+				return *this;
 			}
 
 			virtual bool Serialize(FIStream& Stream) override {
@@ -502,12 +490,6 @@ namespace S1DataCenter {
 					Id = Stream.ReadUInt32();
 					Indices.first = Stream.ReadUInt16();
 					Indices.second = Stream.ReadUInt16();
-
-					auto& BlocksRef = *(Blocks.Get());
-
-					const auto Block = BlocksRef[Indices.first].Block.Get();
-
-					CachedString = &Block[Indices.second];
 				}
 				else {
 					Stream.WriteUInt32(Hash);
@@ -523,7 +505,7 @@ namespace S1DataCenter {
 		};
 
 		DWORD										Count = 0;
-		TRef<BucketElement>							Elements = nullptr;
+		std::vector<BucketElement>					Elements;
 
 		//Ref
 		TRef<DCStringBlocks>						Blocks = nullptr;
@@ -535,8 +517,8 @@ namespace S1DataCenter {
 
 			for (size_t i = 0; i < Count; i++)
 			{
-				if (Elements.Get()[i].Hash == Hash) {
-					return Elements.Get()[i].CachedString.Get();
+				if (Elements[i].Hash == Hash) {
+					return Elements[i].CachedString.Get();
 				}
 			}
 
@@ -548,7 +530,7 @@ namespace S1DataCenter {
 				Count = Stream.ReadUInt32();
 
 				if (Count > 1) {
-					Elements = new BucketElement[Count];
+					Elements.reserve(Count);
 				}
 			}
 			else {
@@ -559,19 +541,46 @@ namespace S1DataCenter {
 
 				for (size_t i = 0; i < Count; i++)
 				{
-					(Elements.Get())[i].Blocks = Blocks;
+					BucketElement Element;
 
-					if (!(Elements.Get())[i].Serialize(Stream)) {
+					if (!Element.Serialize(Stream)) {
 						return false;
 					}
+
+					Elements.push_back(std::move(Element));
 				}
 			}
 
 			return true;
 		}
+
+		StringsBucket() {}
+		StringsBucket(StringsBucket&& other) noexcept {
+			Count = other.Count;
+			Elements = std::move(other.Elements);
+			Blocks = other.Blocks;
+
+			other.Count = 0;
+		}
+		StringsBucket& operator=(StringsBucket&& other) noexcept {
+			if (&other == this) {
+				return *this;
+			}
+
+			Count = other.Count;
+			Elements = std::move(other.Elements);
+			Blocks = other.Blocks;
+
+			other.Count = 0;
+
+			return *this;
+		}
+
+		StringsBucket(const StringsBucket& other) = delete;
+		StringsBucket& operator=(const StringsBucket& other) = delete;
 	};
 
-	struct DCStringsBuckets : DCBuckets<StringsBucket> {};
+	using DCStringsBuckets = DCBuckets<StringsBucket>;
 
 	struct DCMap : DCSerializable {
 		struct StringEntry : DCSerializable {
@@ -579,28 +588,16 @@ namespace S1DataCenter {
 
 			//Ref
 			TRef<const wchar_t>				CachedString = nullptr;
-			TRef<DCStringBlocks>			Blocks = nullptr;
 
 			StringEntry() {}
 			StringEntry(StringEntry&& other)noexcept {
 				Indices = other.Indices;
 				CachedString = other.CachedString;
-				Blocks = other.Blocks;
 			}
 			virtual bool Serialize(FIStream& Stream) override {
 				if (Stream.IsLoading()) {
 					Indices.first = Stream.ReadUInt16();
 					Indices.second = Stream.ReadUInt16();
-
-					if (*((INT*)&Indices) == -1) {
-						CachedString = nullptr;
-					}
-					else {
-						auto& BlocksRef = *(Blocks.Get());
-						const auto Block = BlocksRef[Indices.first].Block.Get();
-
-						CachedString = &Block[Indices.second];
-					}
 				}
 				else {
 					Stream.WriteUInt16(Indices.first);
@@ -615,13 +612,7 @@ namespace S1DataCenter {
 		DCStringsBuckets			Buckets;
 		DCPaddedArray<StringEntry>	AllStrings;
 
-		DCMap() {
-			Buckets.Blocks = &StringBlocks;
-
-			AllStrings.Parent = this;
-			AllStrings.Callback = (DCPaddedArray<StringEntry>::CallbackPtr)PrepareItem;
-			//AllStrings.MinCount = 1;
-		}
+		DCMap() {}
 
 		virtual bool Serialize(FIStream& Stream) override {
 			if (!StringBlocks.Serialize(Stream)) {
@@ -639,19 +630,34 @@ namespace S1DataCenter {
 			return true;
 		}
 		const wchar_t* GetString(WORD BlockIndex, WORD StringIndex) {
-			const wchar_t* Block = StringBlocks[BlockIndex].Block.Get();
+			const wchar_t* Block = StringBlocks.Data[BlockIndex].Block.Get();
 
 			return &Block[StringIndex];
+		}
+
+		bool Prepare() noexcept {
+			for (auto& Bucket : Buckets.Buckets) {
+				for (auto& BucketElement : Bucket.Elements) {
+					BucketElement.CachedString = &(StringBlocks.Data[BucketElement.Indices.first].Block.Get())[BucketElement.Indices.second];
+				}
+			}
+
+			for (auto& StringEntry : AllStrings.Data) {
+				if (StringEntry.Indices.first == UINT16_MAX || StringEntry.Indices.second == UINT16_MAX) {
+					StringEntry.CachedString = nullptr;
+				}
+				else {
+					StringEntry.CachedString = &(StringBlocks.Data[StringEntry.Indices.first].Block.Get())[StringEntry.Indices.second];
+				}
+			}
+
+			return true;
 		}
 
 		void Clear() noexcept {
 			StringBlocks.Clear();
 			Buckets.Clear();
 			AllStrings.Clear();
-		}
-	private:
-		static void PrepareItem(DCMap* This, StringEntry* Item) {
-			Item->Blocks = &This->StringBlocks;
 		}
 	};
 
@@ -812,6 +818,8 @@ namespace S1DataCenter {
 			};
 		};
 
+		std::wstring					StringyfiedValue;
+
 		bool IsValid() const noexcept {
 			return (TypeInfo & 3) != 0;
 		}
@@ -851,14 +859,10 @@ namespace S1DataCenter {
 		virtual bool Serialize(FIStream& Stream) override {
 			if (Stream.IsLoading()) {
 				NameId = Stream.ReadUInt16();
-				/*if (!NameId) {
-					Message("read attribute with nameId 0??");
-				}*/
 
 				TypeInfo = (AttributeType)Stream.ReadUInt16();
 
-				Indices.first = Stream.ReadUInt16();
-				Indices.second = Stream.ReadUInt16();
+				IntValue = Stream.ReadUInt32();
 
 #if DC_64
 				Padding = Stream.ReadUInt32(); //padding bytes
@@ -890,21 +894,22 @@ namespace S1DataCenter {
 			StringRef = other.StringRef;
 		}
 
-		void MessageThis() const noexcept {
-			if (!IsValid()) {
-				return;
+		bool CacheValue()noexcept {
+			if (IsFloat()) {
+				StringyfiedValue = std::move(std::to_wstring(FloatValue));
+			}
+			else if (IsInt()) {
+				StringyfiedValue = std::move(std::to_wstring(IntValue));
+			}
+			else if (IsString()) {
+				StringyfiedValue = std::move(std::wstring(StringRef.Get()));
+			}
+			else {
+				Message("XmlNodeFromDCElement::Unknown attribute type %d", (INT)TypeInfo);
+				return false;
 			}
 
-			if (IsInt() && NameRef.Get()) {
-				Message("ARG %ws=%d", NameRef.Get(), IntValue);
-			}
-			else if (IsFloat() && NameRef.Get()) {
-				Message("ARG %ws=%f", NameRef.Get(), FloatValue);
-
-			}
-			else if (StringRef.Get() && NameRef.Get()) {
-				Message("ARG %ws=%ws", NameRef.Get(), StringRef.Get());
-			}
+			return true;
 		}
 	};
 
@@ -923,8 +928,10 @@ namespace S1DataCenter {
 
 		//Cached
 		TRef<const wchar_t>					NameRef = nullptr;
-		std::vector<const AttributeItem*>	Arguments;
-		std::vector<const ElementItem*>		Children;
+		std::vector<AttributeItem*>			Attributes;
+		std::vector<ElementItem*>			Children;
+
+		std::wstring						NameCache;
 
 		ElementItem() {}
 		ElementItem(const ElementItem& other) {
@@ -944,13 +951,14 @@ namespace S1DataCenter {
 			Padd2 = other.Padd2;
 #endif
 
-			Arguments = other.Arguments;
+			Attributes = other.Attributes;
 			Children = other.Children;
 		}
 
 		virtual bool Serialize(FIStream& Stream) override {
 			if (Stream.IsLoading()) {
 				Name = Stream.ReadUInt16();
+
 				Index = Stream.ReadUInt16();
 				ArgsCount = Stream.ReadUInt16();
 				ChildCount = Stream.ReadUInt16();
@@ -990,6 +998,7 @@ namespace S1DataCenter {
 
 			return true;
 		}
+
 		virtual void operator=(ElementItem& other) {
 			Name = other.Name;
 			Index = other.Index;
@@ -1004,7 +1013,7 @@ namespace S1DataCenter {
 			Padd2 = other.Padd2;
 #endif
 
-			Arguments = other.Arguments;
+			Attributes = other.Attributes;
 			Children = other.Children;
 		}
 
@@ -1016,14 +1025,15 @@ namespace S1DataCenter {
 	};
 
 	struct S1DataCenter : DCSerializable {
+		
 		INT												FormatVersion = 0;
 		UINT64											Unk1_8 = 0;
 		INT												Version = 0;
 
 		UnkTree											Unk;
 		DCArray<DCIndex>								Indices;
-		DCArray<DCBlockArray<AttributeItem>>			Attributes;
-		DCArray<DCBlockArray<ElementItem>>				Elements;
+		DCArray<DCBlockArray<AttributeItem, 8>>			Attributes;
+		DCArray<DCBlockArray<ElementItem, 16>>			Elements;
 		DCMap											ValuesMap;
 		DCMap											NamesMap;
 
@@ -1036,7 +1046,7 @@ namespace S1DataCenter {
 
 		virtual bool Serialize(FIStream& Stream) override;
 
-		TRef<const ElementItem> GetRootElement() {
+		TRef<ElementItem> GetRootElement() {
 			return &Elements.Data[0].Data[0];
 		}
 
@@ -1073,12 +1083,65 @@ namespace S1DataCenter {
 			return bIsLoaded;
 		}
 
+		void BuildDCExportName(std::wstring& str) const noexcept {
+			str += L"DC";
+			str += L"_";
+			str += std::to_wstring(Version);
+		}
+
 		void BuildDCExportName(std::string& str) const noexcept {
-			str += "DC_";
+			str += "DC";
+			str += "_";
 			str += std::to_string(Version);
 		}
 
+		ElementItem* CreateNewElement(const wchar_t* Name, size_t NameSize)noexcept;
+		AttributeItem* CreateNewAttribute(const wchar_t* Name, size_t NameSize, const wchar_t* Value, size_t ValueSize)noexcept;
+
 	private:
+
+		DCBlockArray<ElementItem, 16>& GetElementsContainerForNewElement()noexcept {
+			if (!Elements.Count) {
+			create_new_block:
+				Elements.Data.push_back(std::move(DCBlockArray<ElementItem, 16>()));
+				Elements.Data.back().Data.reserve(ElementsBlockSize);
+				Elements.Data.back().MaxCount = ElementsBlockSize;
+				
+				Elements.Count++;
+
+				return Elements.Data.back();
+			}
+
+			for (size_t i = 0; i < Elements.Data.size(); i++) {
+				if (Elements.Data[i].CanWrite(1)) {
+					return Elements.Data[i];
+				}
+			}
+
+			goto create_new_block;
+		}
+
+		DCBlockArray<AttributeItem, 8>& GetAttributesContainerForNewAttribute()noexcept {
+			if (!Elements.Count) {
+			create_new_block:
+				Elements.Data.push_back(std::move(DCBlockArray<ElementItem, 16>()));
+				Elements.Data.back().Data.reserve(ElementsBlockSize);
+				Elements.Data.back().MaxCount = ElementsBlockSize;
+
+				Elements.Count++;
+
+				return Elements.Data.back();
+			}
+
+			for (size_t i = 0; i < Elements.Data.size(); i++) {
+				if (Elements.Data[i].CanWrite(1)) {
+					return Elements.Data[i];
+				}
+			}
+
+			goto create_new_block;
+		}
+
 		bool bIsLoaded = false;
 		DCState state = DCState::Idle;
 

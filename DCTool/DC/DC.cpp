@@ -132,6 +132,7 @@ void DCTool::RenderUI()
 			ImGui::InputText("DC FileName", FileName, 1024);
 
 			if (!DataCenter.IsLoaded()) {
+				ImGui::NewLine();
 				if (ImGui::Button("Load DC")) {
 					do {
 						if (strnlen_s(FileName, 1024) == 0) {
@@ -147,6 +148,98 @@ void DCTool::RenderUI()
 						}
 
 						Message("DC loaded successfully");
+
+					} while (0);
+				}
+			}
+
+			if (!DataCenter.IsLoaded()) {
+				ImGui::Separator();
+				ImGui::TextColored(INFO_COLOR, "## From DC Files ##");
+				ImGui::InputText("DC Files Dir", ImportBasePath, MAX_PATH);
+
+				ImGui::RadioButton("XML", &DCFilesType, 0);
+				ImGui::SameLine();
+				ImGui::RadioButton("JSON", &DCFilesType, 1);
+
+				static bool CompreseDC = false;
+				static bool EncryptDC = false;
+				if (ImGui::Checkbox("Compress", &CompreseDC)) {
+					if (CompreseDC) {
+						EncryptDC = false;
+					}
+				}
+
+				if (CompreseDC) {
+					ImGui::SameLine();
+					ImGui::Checkbox("Encrypt", &EncryptDC);
+				}
+			
+				ImGui::NewLine();
+				if (ImGui::Button("Build DC")) {
+					DataCenter.Clear();
+
+					do {
+						wchar_t DirName[MAX_PATH];
+
+						INT Len = 0;
+						Len = MultiByteToWideChar(0, 0, ImportBasePath, strnlen_s(ImportBasePath, MAX_PATH), DirName, MAX_PATH);
+						if (!Len) {
+							Message("An unexpected error occurred!");
+							break;
+						}
+
+						DirName[Len] = L'\0';
+
+						if (DCFilesType == 0) {
+							DCAdaptors::DCXMLAdaptor xmlAddaptor;
+
+							if (!xmlAddaptor.BuildDC(DirName, &DataCenter)) {
+								Message("Failed to build the DC from XML files!");
+								break;
+							}
+						}
+						else if (DCFilesType == 1) {
+							DCAdaptors::DCJsonAdaptor jsonAddaptor;
+
+							if (!jsonAddaptor.BuildDC(DirName, &DataCenter)) {
+								Message("Failed to build the DC from JSON files!");
+								break;
+							}
+						}
+						else {
+							Message("Unknown DC files format!");
+							break;
+						}
+
+						FIStream DCStream;
+						DCStream._isLoading = false;
+						DCStream.Resize(1024 * 1024 * 512); //512 Mb
+
+						if (!DataCenter.Serialize(DCStream)) {
+							Message("Failed to serialize DC!");
+							break;
+						}
+
+						if (CompreseDC) {
+							if (EncryptDC) {
+
+							}
+						}
+
+						//@TODO compress and encrypt here
+
+						std::string DCFileName = ImportBasePath;
+						DCFileName += "/DC_";
+						DCFileName += std::to_string(DataCenter.Version);
+						DCFileName += ".bin";
+
+						if (!DCStream.save_to_file(DCFileName.c_str())) {
+							Message("Failed to save DC file [%s]!", DCFileName.c_str());
+							break;
+						}
+
+						Message("Successfully Build DC file[%s]", DCFileName.c_str());
 
 					} while (0);
 				}
@@ -186,6 +279,7 @@ void DCTool::RenderUI()
 				}
 
 				ImGui::Separator();
+				//ImGui::InputText("Export Path", ExportBasePath, MAX_PATH);
 				if (ImGui::Button("Export to XML"))
 				{
 					DCAdaptors::DCXMLAdaptor adaptor;
@@ -195,7 +289,7 @@ void DCTool::RenderUI()
 							Message("Failed to build XML adaptor");
 						}
 
-						if (!adaptor.Export(".\\XMLDC\\")) {
+						if (!adaptor.Export(ExportBasePath)) {
 							Message("Failed to export XML data");
 						}
 					} while (0);

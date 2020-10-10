@@ -88,21 +88,43 @@ bool FIStream::load_from_file(const char *file){
 	return true;
 }
 
+bool FIStream::load_from_file(const wchar_t* file) {
+	std::wstring TFile = file;
+
+	return load_from_file(std::string(TFile.begin(), TFile.end()).c_str());
+}
+
 bool FIStream::save_to_file(const char * fileName)
 {
 	std::ofstream file;
-	file.open(fileName, std::fstream::binary | std::fstream::out | std::fstream::trunc);
+	file.open(fileName, std::ofstream::binary | std::ofstream::out);
 	if (!file.is_open()) {
+		Message("FIStream::ofstream::open error[%s]", strerror(errno));
 		return false;
 	}
 
-	file.write((const char*)_raw, _size);
+	file.write((const char*)_raw, _pos);
 
 	file.close();
 
 	return true;
 }
 
+bool FIStream::save_to_file(const wchar_t* fileName)
+{
+	std::wofstream file;
+	file.open(fileName, std::wofstream::binary | std::wofstream::out);
+	if (!file.is_open()) {
+		Message("FIStream::ofstream::open error[%s]", strerror(errno));
+		return false;
+	}
+
+	file.write((const wchar_t*)_raw, _pos / 2);
+
+	file.close();
+
+	return true;
+}
 
 //WRITE_*******************************************************
 void FIStream::Resize(u_int64 size)

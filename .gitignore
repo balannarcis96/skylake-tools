@@ -51,3 +51,4 @@ libs/zlib/Src/examples/
 /MapReaderV2/resources
 /.vs/MapReaderV2/v16
 /.vs/MapReaderV2/config
+/libs/expat
