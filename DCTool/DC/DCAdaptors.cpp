@@ -9,6 +9,8 @@
 #include <unordered_map>
 #include <string_view>
 
+#include "../RapidXML/rapidxml.hpp"
+
 std::unordered_map<std::wstring, WORD> AttributeTypes;
 
 wchar_t* PrintElementName(wchar_t* Buffer, S1DataCenter::ElementItem* Element, INT Depth) noexcept {
@@ -28,6 +30,145 @@ wchar_t* PrintElementName(wchar_t* Buffer, S1DataCenter::ElementItem* Element, I
 	*Cursor = L' ';
 
 	return ++Cursor;
+}
+
+void EscapeValue(std::wstring& String, bool reverse = false)noexcept {
+	std::wstring rightSubstr;
+
+	if (reverse) {
+		/*start_reverse:
+			size_t Size = String.size();
+
+			while (Size--) {
+				if (String[Size] == L'&') {
+					rightSubstr = std::move(String.substr(Size + 1));
+
+					if (rightSubstr.starts_with(L"&quot;")) {
+						std::wstring temp;
+
+						temp += String.substr(0, Size);
+						temp += L"\"";
+						temp += rightSubstr.substr(6);
+
+						String = std::move(temp);
+
+						goto start;
+					}
+					else if (rightSubstr.starts_with(L"&apos;")) {
+						std::wstring temp;
+
+						temp += String.substr(0, Size);
+						temp += L"'";
+						temp += rightSubstr.substr(6);
+
+						String = std::move(temp);
+
+						goto start;
+					}
+					else if (rightSubstr.starts_with(L"&amp;")) {
+						std::wstring temp;
+
+						temp += String.substr(0, Size);
+						temp += L"&";
+						temp += rightSubstr.substr(5);
+
+						String = std::move(temp);
+
+						goto start;
+					}
+					else if (rightSubstr.starts_with(L"&lt;")) {
+						std::wstring temp;
+
+						temp += String.substr(0, Size);
+						temp += L"<";
+						temp += rightSubstr.substr(4);
+
+						String = std::move(temp);
+
+						goto start;
+					}
+					else if (rightSubstr.starts_with(L"&gt;")) {
+						std::wstring temp;
+
+						temp += String.substr(0, Size);
+						temp += L">";
+						temp += rightSubstr.substr(4);
+
+						String = std::move(temp);
+
+						goto start;
+					}
+				}
+			}*/
+	}
+	else {
+	start:
+		size_t Size = String.size();
+
+		while (Size--) {
+			if (String[Size] == L'"') {
+				std::wstring temp;
+
+				temp += String.substr(0, Size);
+				temp += L"&quot;";
+				temp += String.substr(Size + 1);
+
+				String = std::move(temp);
+
+				goto start;
+			}
+			else if (String[Size] == L'\'') {
+				std::wstring temp;
+
+				temp += String.substr(0, Size);
+				temp += L"&apos;";
+				temp += String.substr(Size + 1);
+
+				String = std::move(temp);
+				goto start;
+			}
+			else if (String[Size] == L'<') {
+				std::wstring temp;
+
+				temp += String.substr(0, Size);
+				temp += L"&lt;";
+				temp += String.substr(Size + 1);
+
+				String = std::move(temp);
+				goto start;
+			}
+			else if (String[Size] == L'>') {
+				std::wstring temp;
+
+				temp += String.substr(0, Size);
+				temp += L"&gt;";
+				temp += String.substr(Size + 1);
+
+				String = std::move(temp);
+				goto start;
+			}
+			else if (String[Size] == L'&') {
+				rightSubstr = String.substr(Size + 1);
+				if (rightSubstr.starts_with(L"lt;") ||
+					rightSubstr.starts_with(L"gt;") ||
+					rightSubstr.starts_with(L"quot;") ||
+					rightSubstr.starts_with(L"apos;") ||
+					rightSubstr.starts_with(L"amp;")) {
+					continue;
+				}
+
+				std::wstring temp;
+
+				temp += String.substr(0, Size);
+				temp += L"&amp;";
+				temp += String.substr(Size + 1);
+
+				String = std::move(temp);
+
+				goto start;
+			}
+		}
+	}
 }
 
 wchar_t* PrintAttributes(wchar_t* Buffer, S1DataCenter::ElementItem* Element)noexcept {
@@ -51,13 +192,17 @@ wchar_t* PrintAttributes(wchar_t* Buffer, S1DataCenter::ElementItem* Element)noe
 
 		auto Item = AttributeTypes.find(AttrFullName);
 		if (Item == AttributeTypes.end()) {
+			//Message("AttrFullName e[%ws] a[%ws] -> [%ws]", Element->NameRef.Get(), Attribute->NameRef.Get(), AttrFullName.c_str());
 			AttributeTypes.insert(std::pair<std::wstring, WORD>(AttrFullName, (WORD)Attribute->TypeInfo));
 		}
 
 		*(Buffer++) = L'=';
 		*(Buffer++) = L'\"';
 
+		EscapeValue(Attribute->StringyfiedValue);
+
 		Len = wcslen(Attribute->StringyfiedValue.c_str());
+
 		memcpy_s(Buffer, Len * sizeof(wchar_t), Attribute->StringyfiedValue.c_str(), Len * sizeof(wchar_t));
 		Buffer += Len;
 
@@ -137,7 +282,10 @@ bool DCAdaptors::DCXMLAdaptor::Export(const wchar_t* RootDir)
 		Message("Found __root__ (%ws) element, childrenCount: %lld\nClick OK to start exporting.", RootElement->NameRef.Get(), RootElement->Children.size());
 	}
 
-	wchar_t* buffer = new wchar_t[(1024 * 1024) * 512];
+	constexpr size_t CBufferSize = (1024 * 1024) * 512;
+
+	auto buffer = std::unique_ptr<wchar_t>(new wchar_t[CBufferSize]);
+	auto utf8Buffer = std::unique_ptr<char>(new char[(CBufferSize * 2) + 1]);
 
 	std::unordered_map<std::wstring, INT> FilesMap;
 
@@ -178,22 +326,28 @@ bool DCAdaptors::DCXMLAdaptor::Export(const wchar_t* RootDir)
 		FileSavePath += std::to_wstring(FileIndex);
 		FileSavePath += L".xml";
 
-		buffer[0] = '\0';
-		wchar_t* end = XmlFromDCElement(Element, buffer);
-		if (end == buffer) {
+		buffer.get()[0] = '\0';
+		wchar_t* end = XmlFromDCElement(Element, buffer.get());
+		if (end == buffer.get()) {
 			continue;
 		}
 
 		*end = L'\0';
 
+		INT EndIndex = WideCharToMultiByte(CP_UTF8, 0, buffer.get(), (end - buffer.get()), utf8Buffer.get(), (CBufferSize * 2) + 1, NULL, NULL);
+		if (!EndIndex) {
+			Message("Failed to convert to UTF8");
+			return false;
+		}
+
+		utf8Buffer.get()[EndIndex] = '\0';
+
 		std::ofstream outputFile = std::ofstream(FileSavePath.c_str(), std::ofstream::binary);
 
-		outputFile.write((const char*)buffer, (end - buffer) * sizeof(wchar_t));
+		outputFile.write(utf8Buffer.get(), EndIndex);
 
 		outputFile.close();
 	}
-
-	delete[] buffer;
 
 	if (!SerializeMetadata(RootDir, ValidCount)) {
 		Message("Failed to save metadata");
@@ -207,7 +361,7 @@ bool DCAdaptors::DCXMLAdaptor::Export(const wchar_t* RootDir)
 
 bool DCAdaptors::DCXMLAdaptor::BuildDC(const wchar_t* DirName, TRef<S1DataCenter::S1DataCenter> DataCenter)
 {
-	S1DataCenter::StateGuard<S1DataCenter::DCState::Building>(DataCenter.Get());
+	S1DataCenter::StateGuard<S1DataCenter::DCState::Building> StateGuard(DataCenter.Get());
 
 	this->DataCenter = DataCenter;
 
@@ -237,31 +391,25 @@ bool DCAdaptors::DCXMLAdaptor::BuildDC(const wchar_t* DirName, TRef<S1DataCenter
 		Message("Found xml files count mismatch, if not intended please revise.\n\nExpected [%lld] Found[%lld]", (size_t)FilesCount, FileNames.size());
 	}
 
-	DataCenter->Elements.
+	ElementItemRaw RootElement;
+	RootElement.Name = L"__root__";
 
 	constexpr size_t ReadBufferSize = 1024 * 1024 * 512;
-	auto Buffer = std::unique_ptr<wchar_t>(new wchar_t[ReadBufferSize + 1]);
+	auto Utf8Buffer = std::unique_ptr<char>(new char[ReadBufferSize + 1]);
 
 	for (size_t Index = 0; Index < FileNames.size(); Index++)
 	{
-		std::ifstream File = std::ifstream(FileNames[Index].c_str());
+		std::ifstream File = std::ifstream(FileNames[Index].c_str(), std::ifstream::binary | std::ifstream::ate);
 		if (!File.is_open()) {
 			Message("Failed to open xml file[%s]", FileNames[Index].c_str());
 			return false;
 		}
 
-		File.seekg(0, std::ifstream::end);
 		size_t StreamSize = File.tellg();
 		File.seekg(0, std::ifstream::beg);
 
 		if (StreamSize == 0) {
 			Message("File[%s] is empty", FileNames[Index].c_str());
-			File.close();
-			continue;
-		}
-
-		if (StreamSize % 2 != 0) {
-			Message("File[%s] encoding mismatch, expected UTF16", FileNames[Index].c_str());
 			File.close();
 			continue;
 		}
@@ -272,13 +420,98 @@ bool DCAdaptors::DCXMLAdaptor::BuildDC(const wchar_t* DirName, TRef<S1DataCenter
 			return false;
 		}
 
-		File.read((char*)Buffer.get(), StreamSize);
+		File.read(Utf8Buffer.get(), StreamSize);
 		File.close();
 
-		Buffer.get()[StreamSize] = L'\0';
+		Utf8Buffer.get()[StreamSize] = '\0';
 
-		if (!ParseXmlFile(Buffer.get(), StreamSize / 2)) {
+		if (!ParseXmlFile(FileNames[Index].c_str(), Utf8Buffer.get(), StreamSize, &RootElement)) {
 			Message("Failed to parse xml file[%s]", FileNames[Index].c_str());
+			return false;
+		}
+	}
+
+	if (!DataCenter->InsertElementTree(&RootElement)) {
+		Message("Failed to Build DC from xml data");
+		return false;
+	}
+
+	return true;
+}
+
+bool PrepareXMLTree(const char* FileName, rapidxml::xml_node<>* xmlNode, ElementItemRaw* RawElement)noexcept {
+
+	//RawElement->Children.push_back(std::move(ElementItemRaw()));
+
+	//ElementItemRaw* NewElement = &RawElement->Children.back();
+
+	constexpr size_t CConvertStrSize = (1024 * 1024) * 64;
+
+	std::string_view ConvertView = xmlNode->name();
+	size_t ConvertSize = ConvertView.size();
+	static wchar_t ConvertStr[CConvertStrSize];
+
+	INT EndLen = MultiByteToWideChar(CP_UTF8, 0, ConvertView.data(), ConvertSize, ConvertStr, 4096);
+	if (!EndLen) {
+		Message("Failed to convert element name to UTF16 File:[%s] name[%s]", FileName, ConvertView.data());
+		return false;
+	}
+	ConvertStr[EndLen] = L'\0';
+
+	RawElement->Name = std::move(ConvertStr);
+
+	//Prepare attributes
+	for (rapidxml::xml_attribute<>* attr = xmlNode->first_attribute(); attr != NULL; attr = attr->next_attribute())
+	{
+		ConvertView = attr->name();
+		ConvertSize = ConvertView.size();
+
+		EndLen = EndLen = MultiByteToWideChar(CP_UTF8, 0, ConvertView.data(), ConvertSize, ConvertStr, 4096);
+		if (!EndLen) {
+			Message("Failed to convert element name to UTF16 File:[%s] name[%s]", FileName, ConvertView.data());
+			return false;
+		}
+		ConvertStr[EndLen] = L'\0';
+
+		std::wstring AttributeFullName = RawElement->Name;
+		AttributeFullName += L'.';
+		AttributeFullName += ConvertStr;
+
+		auto Type = AttributeTypes.find(AttributeFullName);
+		if (Type == AttributeTypes.end()) {
+			Message("Could not find type for attribute [%ws] in File [%s]", AttributeFullName.c_str(), FileName);
+			return false;
+		}
+
+		RawElement->Attributes.push_back(std::move(AttributeItemRaw()));
+		RawElement->Attributes.back().Name = std::move(ConvertStr);
+
+		ConvertView = attr->value();
+		ConvertSize = ConvertView.size();
+
+		if (ConvertSize) {
+			EndLen = MultiByteToWideChar(CP_UTF8, 0, ConvertView.data(), ConvertSize, ConvertStr, CConvertStrSize);
+			if (!EndLen) {
+				Message("Failed to convert attr value to UTF16 File:[%s] value[%s]", FileName, ConvertView.data());
+				return false;
+			}
+			ConvertStr[EndLen] = L'\0';
+		}
+		else {
+			ConvertStr[0] = L'\0';
+		}
+
+		RawElement->Attributes.back().Value = std::move(ConvertStr);
+		RawElement->Attributes.back().Type = Type->second;
+	}
+
+	//Prepare children
+	for (rapidxml::xml_node<>* child = xmlNode->first_node(); child != NULL; child = child->next_sibling())
+	{
+		RawElement->Children.push_back(std::move(ElementItemRaw()));
+
+		if (!PrepareXMLTree(FileName, child, &RawElement->Children.back())) {
+			Message("Failed to prepare node [%s] in File [%s]", child->name(), FileName);
 			return false;
 		}
 	}
@@ -286,9 +519,20 @@ bool DCAdaptors::DCXMLAdaptor::BuildDC(const wchar_t* DirName, TRef<S1DataCenter
 	return true;
 }
 
-bool DCAdaptors::DCXMLAdaptor::ParseXmlFile(const wchar_t* Buffer, size_t BufferLength) noexcept
+bool DCAdaptors::DCXMLAdaptor::ParseXmlFile(const char* FileName, char* Buffer, size_t BufferLength, ElementItemRaw* Parent) noexcept
 {
-	return false;
+	auto XmlDoc = std::make_unique<rapidxml::xml_document<>>();
+
+	XmlDoc->parse<0>(Buffer);
+
+	if (XmlDoc->first_node()->next_sibling()) {
+		Message("File [%s] must contain only one root node", FileName);
+		return false;
+	}
+
+	Parent->Children.push_back(std::move(ElementItemRaw()));
+
+	return PrepareXMLTree(FileName, XmlDoc->first_node(), &Parent->Children.back());
 }
 
 bool DCAdaptors::DCAdaptor::SerializeMetadata(const wchar_t* RootDir, INT FilesCount) noexcept
@@ -348,17 +592,22 @@ bool DCAdaptors::DCAdaptor::ReadMetadata(const wchar_t* File, INT& FilesCount) n
 		return false;
 	}
 
-	wchar_t AttributeTypeNameBuffer[1024];
+	auto AttributeTypeNameBuffer = std::unique_ptr<wchar_t>(new wchar_t[1024]);
 
 	size_t AttributeTypesSize = Stream.ReadUInt64();
 	for (size_t i = 0; i < AttributeTypesSize; i++) {
 		size_t StrLength = Stream.ReadUInt64();
-		Stream.Read((uint8_t*)AttributeTypeNameBuffer, StrLength);
-		AttributeTypeNameBuffer[StrLength] = L'\0';
+		Stream.Read((uint8_t*)AttributeTypeNameBuffer.get(), StrLength);
 
 		WORD AttrType = Stream.ReadUInt16();
 
-		AttributeTypes.insert(std::pair<std::wstring, WORD>(AttributeTypeNameBuffer, AttrType));
+		AttributeTypes.insert(std::pair<std::wstring, WORD>(std::wstring(AttributeTypeNameBuffer.get(), StrLength / 2), AttrType));
+	}
+
+	auto result = AttributeTypes.find(L"String.id");
+	if (result == AttributeTypes.end()) {
+
+		Message("Read %lld Attribute types from metadata", AttributeTypes.size());
 	}
 
 	Message("Read %lld Attribute types from metadata", AttributeTypes.size());
@@ -379,80 +628,3 @@ bool DCAdaptors::DCAdaptor::FindAllFilesInDirectory(const char* DCDir, const cha
 	return true;
 }
 
-wchar_t* FindChar(wchar_t* Buffer, wchar_t TargetChar) {
-	while (*Buffer != TargetChar && *Buffer) {
-		Buffer++;
-	}
-
-	if (*Buffer == (wchar_t)0) {
-		return nullptr;
-	}
-
-	return Buffer;
-}
-
-wchar_t* ConsumeSpaces(wchar_t* Buffer) {
-	while (*Buffer && (*Buffer == L' ' || *Buffer == L'\t'))
-	{
-		Buffer++;
-	}
-
-	if (*Buffer == (wchar_t)0) {
-		return nullptr;
-	}
-
-	return Buffer;
-}
-
-wchar_t* FindElementNameEnding(wchar_t* Buffer) {
-	static wchar_t Stoppers[] = { L'\"', L'>', L'/', L'=' };
-
-	while (*Buffer) {
-		for (auto& Stopper : Stoppers) {
-			if (*Buffer == Stopper) {
-				return nullptr;
-			}
-		}
-
-		if (*Buffer == L' ')
-		{
-			return Buffer;
-		}
-	}
-
-	return nullptr;
-}
-
-wchar_t* DCAdaptors::DCXMLAdaptor::ParseElement(wchar_t* Buffer) noexcept
-{
-	Buffer = FindChar(Buffer, L'<');
-	if (!Buffer) {
-		return nullptr;
-	}
-
-	Buffer = ConsumeSpaces(Buffer);
-	if (!Buffer) {
-		return nullptr;
-	}
-
-	wchar_t* NameEnding = FindElementNameEnding(Buffer);
-	if (!NameEnding) {
-		return nullptr;
-	}
-
-	auto Element = DataCenter->CreateNewElement(Buffer, (size_t)(NameEnding - Buffer));
-	if (!Element) {
-		return nullptr;
-	}
-
-	Element.NameCache = std::wstring(Buffer, (size_t)(NameEnding - Buffer));
-
-	Buffer = ConsumeSpaces(Buffer);
-	if (!Buffer) {
-		return nullptr;
-	}
-
-
-
-	return nullptr;
-}

@@ -1,5 +1,8 @@
 #pragma once
 
+#include <unordered_map>
+#include <array>
+
 struct AttributeItemRaw {
 	std::wstring		Name;
 	std::wstring		Value;
@@ -34,6 +37,9 @@ struct ElementItemRaw {
 	ElementItemRaw() {}
 	ElementItemRaw(ElementItemRaw&& other) noexcept {
 		Name = std::move(other.Name);
+
+		Attributes = std::move(other.Attributes);
+		Children = std::move(other.Children);
 	}
 	ElementItemRaw(const ElementItemRaw&) = delete;
 	ElementItemRaw& operator=(const ElementItemRaw&) = delete;
@@ -44,14 +50,14 @@ struct ElementItemRaw {
 
 		Name = std::move(other.Name);
 
+		Attributes = std::move(other.Attributes);
+		Children = std::move(other.Children);
+
 		return *this;
 	}
 };
 
 namespace S1DataCenter {
-	// CRC 32 polynomial.
-#define CRC32_POLY 0x04c11db7
-
 	constexpr size_t			CElementsBlockSize = 65536;
 	constexpr size_t			CAttributesBlockSize = 65536;
 	constexpr size_t			CStringsBlockSize = 65536;
@@ -177,7 +183,7 @@ namespace S1DataCenter {
 	//
 	// String CRC, case sensitive.
 	//
-	DWORD appStrCrc(const TCHAR* Data)
+	inline DWORD appStrCrc(const TCHAR* Data)
 	{
 		DWORD Hash = 0;
 		while (*Data)
@@ -194,7 +200,7 @@ namespace S1DataCenter {
 	//
 	// String CRC, case insensitive.
 	//
-	DWORD appStrCrcCaps(const TCHAR* Data)
+	inline DWORD appStrCrcCaps(const TCHAR* Data)
 	{
 		DWORD Hash = 0;
 		while (*Data)
@@ -383,8 +389,8 @@ namespace S1DataCenter {
 			MaxCount = 0;
 		}
 
-		bool CanWrite(size_t Count = 1)const noexcept {
-			return MaxCount - UsedCount <= Count;
+		bool CanWrite(UINT Count = 1)const noexcept {
+			return MaxCount - UsedCount >= Count;
 		}
 	};
 
@@ -426,7 +432,7 @@ namespace S1DataCenter {
 			const auto Remaining = BlockSize - UsedSize;
 
 			//Check if it can fit string
-			if (Remaining <= StringSize + 1) {
+			if (Remaining < StringSize + 1) {
 				return false;
 			}
 
@@ -434,9 +440,11 @@ namespace S1DataCenter {
 
 			OutIndex = (WORD)UsedSize;
 
-			memcpy_s(ToReturn, sizeof(wchar_t) * StringSize, String, sizeof(wchar_t) * StringSize);
+			if (StringSize) {
+				memcpy_s(ToReturn, sizeof(wchar_t) * StringSize, String, sizeof(wchar_t) * StringSize);
 
-			UsedSize += StringSize;
+				UsedSize += StringSize;
+			}
 
 			Block.Get()[UsedSize] = L'\0';
 
@@ -736,6 +744,9 @@ namespace S1DataCenter {
 		DCStringsBuckets			Buckets;
 		DCPaddedArray<StringEntry>	AllStrings;
 
+		std::unordered_map<std::wstring, WORD> PresentStrings;
+		std::unordered_map<std::wstring, std::pair<WORD,WORD>> PresentStringsBig;
+
 		DCMap() {}
 
 		virtual bool Serialize(FIStream& Stream) override {
@@ -785,6 +796,13 @@ namespace S1DataCenter {
 		}
 
 		bool InsertString(const wchar_t* String, size_t StringSize, WORD& StringId) noexcept {
+
+			auto Item = PresentStrings.find(String);
+			if (Item != PresentStrings.end()) {
+				StringId = Item->second;
+				return true;
+			}
+
 			std::pair<WORD, WORD> Indices;
 			if (!InsertStringInBlock(String, StringSize, Indices)) {
 				return false;
@@ -798,21 +816,31 @@ namespace S1DataCenter {
 			AllStrings.Data.back().Indices = Indices;
 			AllStrings.Data.back().CachedString = GetString(Indices.first, Indices.second);
 
+			PresentStrings.insert({ String, StringId });
+
 			return true;
 		}
 
-		bool InsertString(const wchar_t* String, size_t StringSize, WORD& StringId, std::pair<WORD, WORD>& OutIndices) noexcept {
+		bool InsertString(const wchar_t* String, size_t StringSize, std::pair<WORD, WORD>& OutIndices) noexcept {
+			auto Item = PresentStringsBig.find(String);
+			if (Item != PresentStringsBig.end()) {
+				OutIndices = Item->second;
+				return true;
+			}
+
 			if (!InsertStringInBlock(String, StringSize, OutIndices)) {
 				return false;
 			}
 
 			AllStrings.Data.push_back(StringEntry());
 
-			StringId = (WORD)(AllStrings.Data.size() - 1);
+			//StringId = (WORD)(AllStrings.Data.size() - 1);
 
 			AllStrings.Count++;
 			AllStrings.Data.back().Indices = OutIndices;
 			AllStrings.Data.back().CachedString = GetString(OutIndices.first, OutIndices.second);
+
+			PresentStringsBig.insert({ String, OutIndices });
 
 			return true;
 		}
@@ -853,9 +881,9 @@ namespace S1DataCenter {
 	private:
 		bool InsertStringInBlock(const wchar_t* String, size_t StringSize, std::pair<WORD, WORD>& OutIndices)noexcept {
 			for (size_t i = 0; i < StringBlocks.Data.size(); i++) {
-				if (StringBlocks.Data[i].InsertString(String, StringSize, OutIndices.first)) {
+				if (StringBlocks.Data[i].InsertString(String, StringSize, OutIndices.second)) {
 
-					OutIndices.second = (WORD)(i);
+					OutIndices.first = (WORD)(i);
 
 					return true;
 				}
@@ -869,9 +897,9 @@ namespace S1DataCenter {
 				return false;
 			}
 
-			OutIndices.second = (WORD)(StringBlocks.Data.size() - 1);
+			OutIndices.first = (WORD)(StringBlocks.Data.size() - 1);
 
-			return StringBlocks.Data.back().InsertString(String, StringSize, OutIndices.first);
+			return StringBlocks.Data.back().InsertString(String, StringSize, OutIndices.second);
 		}
 	};
 
@@ -1251,10 +1279,6 @@ namespace S1DataCenter {
 		}
 
 		std::vector<const ElementItem*> GetChildren(const struct S1DataCenter* DC) const noexcept;
-
-		void MessageThis() {
-
-		}
 	};
 
 	struct S1DataCenter : DCSerializable {
@@ -1284,6 +1308,8 @@ namespace S1DataCenter {
 			for (size_t i = 0; i < NamesMap.Buckets.Count; i++) {
 				NamesMap.Buckets.Buckets.push_back(StringsBucket());
 			}
+
+			return true;
 		}
 
 		virtual bool Serialize(FIStream& Stream) override;
@@ -1305,6 +1331,7 @@ namespace S1DataCenter {
 			state = DCState::Idle;
 
 			ElementsIndex = 0;
+			AttributesIndex = 0;
 		}
 
 		inline const char* GetDCToolStateStr()noexcept {
@@ -1340,164 +1367,35 @@ namespace S1DataCenter {
 
 		bool InsertElementTree(ElementItemRaw* Root)noexcept {
 			std::pair<WORD, WORD> LocalRootIndices;
-			auto Element = AllocateElement(*Root, LocalRootIndices);
-			if (!Element) {
+			ElementItem* RootElement = AllocateElement(*Root, LocalRootIndices);
+			if (!RootElement) {
 				return false;
 			}
 
-			return InsertElementTreeImpl(Root, Element);
-		}
+			RootElement->ChildCount = (WORD)(Root->Children.size());
 
-		ElementItem* AllocateElements(std::vector<ElementItemRaw>& RawElements, std::pair<WORD, WORD>& OutIndices)noexcept {
-			auto Block = GetElementsContainerForNewElements((INT)RawElements.size(), OutIndices.first);
-
-			//start of this elements block
-			OutIndices.second = (WORD)(Block.Data.size());
-
-			for (auto& RawElement : RawElements) {
-
-				Block.Data.push_back(ElementItem());
-				Block.UsedCount++;
-
-				//Prepare Element
-				ElementItem* NewElement = &Block.Data.back();
-
-				NewElement->Index = ElementsIndex++;
-				NewElement->LocationCache.first = OutIndices.first;
-				NewElement->LocationCache.second = (WORD)(Block.Data.size() - 1);
-				NewElement->NameCache = std::move(RawElement.Name);
-
-				WORD NameId;
-				if (!NamesMap.InsertString(NewElement->NameCache.data(), NewElement->NameCache.size(), NameId)) {
-					Block.Data.pop_back();
-					continue;
+			if (Root->Children.size()) {
+				ElementItem* RootChildrenStart = AllocateElements(Root->Children, RootElement->ChildrenIndices);
+				if (!RootChildrenStart) {
+					return false;
 				}
 
-				NewElement->Name = NameId;
-			}
+				static std::atomic<const wchar_t*> asd;
 
-			return &Block.Data[OutIndices.second];
-		}
-		AttributeItem* AllocateAttributes(std::vector<AttributeItemRaw>& RawAttributes, std::pair<WORD, WORD>& OutIndices)noexcept {
-			auto Block = GetAttributesContainerForNewAttributes((INT)RawAttributes.size(), OutIndices.first);
+				//Parse all sub tree
+				for (size_t i = 0; i < Root->Children.size(); i++) {
+					asd.store(Root->Children[i].Name.c_str());
 
-			//start of this attributes block
-			OutIndices.second = (WORD)(Block.Data.size());
-
-			for (auto& RawAttribute : RawAttributes) {
-				Block.Data.push_back(AttributeItem());
-				Block.UsedCount++;
-
-				//Prepare Attribute
-				AttributeItem* NewAttribute = &Block.Data.back();
-
-				NewAttribute->Index = ElementsIndex++;
-				NewAttribute->LocationCache.first = OutIndices.first;
-				NewAttribute->LocationCache.second = (WORD)(Block.Data.size() - 1);
-				NewAttribute->NameCache = std::move(RawAttribute.Name);
-				NewAttribute->StringyfiedValue = std::move(RawAttribute.Value);
-				NewAttribute->TypeInfo = RawAttribute.Type;
-
-				WORD StringId;
-
-				if (RawAttribute.Type == AttributeType_String) {
-					DWORD Crc32 = appStrCrcCaps(NewAttribute->NameCache.c_str());
-					NewAttribute->TypeInfo = (WORD)(((Crc32 << 2) | AttributeType_String) & 0xffff);
-
-					if (!ValuesMap.InsertString(NewAttribute->StringyfiedValue.data(), NewAttribute->StringyfiedValue.size(), StringId, NewAttribute->Indices)) {
-						return nullptr;
+					if (!InsertElementTreeImpl(&Root->Children[i], &RootChildrenStart[i])) {
+						return false;
 					}
-
-					//StringId not used for attribute value
 				}
-
-				if (!NamesMap.InsertString(NewAttribute->NameCache.data(), NewAttribute->NameCache.size(), StringId)) {
-					return nullptr;
-				}
-
-				NewAttribute->NameId = StringId;
 			}
 
-			return &Block.Data[OutIndices.first];
+			return true;
 		}
 
-		ElementItem* AllocateElement(ElementItemRaw& RawElement, std::pair<WORD, WORD>& OutIndices) {
-			auto Block = GetElementsContainerForNewElements(1, OutIndices.first);
-
-			//start of this elements block
-			OutIndices.second = (WORD)(Block.Data.size());
-
-			Block.Data.push_back(ElementItem());
-			Block.UsedCount++;
-
-			//Prepare Element
-			ElementItem* NewElement = &Block.Data.back();
-
-			NewElement->Index = ElementsIndex++;
-			NewElement->LocationCache.first = OutIndices.first;
-			NewElement->LocationCache.second = (WORD)(Block.Data.size() - 1);
-			NewElement->NameCache = std::move(RawElement.Name);
-
-			WORD NameId;
-			if (!NamesMap.InsertString(NewElement->NameCache.data(), NewElement->NameCache.size(), NameId)) {
-				Block.Data.pop_back();
-				return nullptr;
-			}
-
-			NewElement->Name = NameId;
-
-			return &Block.Data[OutIndices.second];
-		}
 	private:
-		DCBlockArray<ElementItem, CElementSize>& GetElementsContainerForNewElements(INT Count, WORD& Out_Index)noexcept {
-			//Try to find block that will contain all elements
-			for (size_t i = 0; i < Elements.Data.size(); i++)
-			{
-				if (Elements.Data[i].CanWrite(Count)) {
-
-					Out_Index = (WORD)(i);
-
-					return Elements.Data[i];
-				}
-			}
-
-			//Create new block array and reserve max
-			Elements.Data.push_back(std::move(DCBlockArray<ElementItem, CElementSize>()));
-			Elements.Data.back().Data.reserve(CElementsBlockSize);
-			Elements.Data.back().MaxCount = CElementsBlockSize;
-
-			Elements.Count++;
-
-			Out_Index = (WORD)(Elements.Data.size() - 1);
-
-			return Elements.Data.back();
-		}
-		DCBlockArray<AttributeItem, CAttributeSize>& GetAttributesContainerForNewAttributes(INT Count, WORD& Out_Index)noexcept {
-			//Try to find block that will contain all attributes
-			for (size_t i = 0; i < Attributes.Data.size(); i++)
-			{
-				if (Attributes.Data[i].CanWrite(Count)) {
-
-					Out_Index = (WORD)(i);
-
-					return Attributes.Data[i];
-				}
-			}
-
-			//Create new block array and reserve max
-			Attributes.Data.push_back(std::move(DCBlockArray<AttributeItem, CAttributeSize>()));
-
-			Attributes.Data.back().Data.reserve(CAttributesBlockSize);
-			Attributes.Data.back().MaxCount = CAttributesBlockSize;
-
-			Attributes.Count++;
-
-			Out_Index = (WORD)(Attributes.Data.size() - 1);
-
-			return Attributes.Data.back();
-
-		}
-
 		bool InsertElementTreeImpl(ElementItemRaw* RawElement, ElementItem* Element)noexcept {
 			if (RawElement->Attributes.size()) {
 				auto AttrStart = AllocateAttributes(RawElement->Attributes, Element->ArgsIndices);
@@ -1525,13 +1423,164 @@ namespace S1DataCenter {
 			return true;
 		}
 
-		bool bIsLoaded = false;
-		DCState state = DCState::Idle;
+		ElementItem* AllocateElements(std::vector<ElementItemRaw>& RawElements, std::pair<WORD, WORD>& OutIndices)noexcept {
+			auto& Block = GetElementsContainerForNewElements((INT)RawElements.size(), OutIndices.first);
+
+			//start of this elements block
+			OutIndices.second = (WORD)(Block.Data.size());
+
+			for (auto& RawElement : RawElements) {
+
+				Block.Data.push_back(ElementItem());
+				Block.UsedCount++;
+
+				//Prepare Element
+				ElementItem* NewElement = &Block.Data.back();
+
+				NewElement->Index = ++ElementsIndex;
+				NewElement->LocationCache.first = OutIndices.first;
+				NewElement->LocationCache.second = (WORD)(Block.Data.size() - 1);
+				NewElement->NameCache = std::move(RawElement.Name);
+
+				WORD NameId;
+				if (!NamesMap.InsertString(NewElement->NameCache.data(), NewElement->NameCache.size(), NameId)) {
+					Message("Failed to insert string [%ws]", NewElement->NameCache.c_str());
+					Block.Data.pop_back();
+					continue;
+				}
+
+				NewElement->Name = NameId;
+			}
+
+			return &Block.Data[OutIndices.second];
+		}
+		AttributeItem* AllocateAttributes(std::vector<AttributeItemRaw>& RawAttributes, std::pair<WORD, WORD>& OutIndices)noexcept {
+			auto& Block = GetAttributesContainerForNewAttributes((INT)RawAttributes.size(), OutIndices.first);
+
+			//start of this attributes block
+			OutIndices.second = (WORD)(Block.Data.size());
+
+			for (auto& RawAttribute : RawAttributes) {
+				Block.Data.push_back(AttributeItem());
+				Block.UsedCount++;
+
+				//Prepare Attribute
+				AttributeItem* NewAttribute = &Block.Data.back();
+
+				NewAttribute->Index = ++AttributesIndex;
+				NewAttribute->LocationCache.first = OutIndices.first;
+				NewAttribute->LocationCache.second = (WORD)(Block.Data.size() - 1);
+				NewAttribute->NameCache = std::move(RawAttribute.Name);
+				NewAttribute->StringyfiedValue = std::move(RawAttribute.Value);
+				NewAttribute->TypeInfo = RawAttribute.Type;
+
+				WORD StringId;
+
+				if (RawAttribute.Type == AttributeType_String) {
+					DWORD Crc32 = appStrCrcCaps(NewAttribute->NameCache.c_str());
+					NewAttribute->TypeInfo = (WORD)(((Crc32 << 2) | AttributeType_String) & 0xffff);
+
+					if (!ValuesMap.InsertString(NewAttribute->StringyfiedValue.data(), NewAttribute->StringyfiedValue.size(), NewAttribute->Indices)) {
+						return nullptr;
+					}
+
+					//StringId not used for attribute value
+				}
+
+				if (!NamesMap.InsertString(NewAttribute->NameCache.data(), NewAttribute->NameCache.size(), StringId)) {
+					return nullptr;
+				}
+
+				NewAttribute->NameId = StringId;
+			}
+
+			return &Block.Data[OutIndices.second];
+		}
+		ElementItem* AllocateElement(ElementItemRaw& RawElement, std::pair<WORD, WORD>& OutIndices) {
+			auto& Block = GetElementsContainerForNewElements(1, OutIndices.first);
+
+			//start of this elements block
+			OutIndices.second = (WORD)(Block.Data.size());
+
+			Block.Data.push_back(ElementItem());
+			Block.UsedCount++;
+
+			//Prepare Element
+			ElementItem* NewElement = &Block.Data.back();
+
+			NewElement->Index = ++ElementsIndex;
+			NewElement->LocationCache.first = OutIndices.first;
+			NewElement->LocationCache.second = (WORD)(Block.Data.size() - 1);
+			NewElement->NameCache = std::move(RawElement.Name);
+
+			WORD NameId;
+			if (!NamesMap.InsertString(NewElement->NameCache.data(), NewElement->NameCache.size(), NameId)) {
+				Message("AllocateElement::Failed to insert string [%ws]", NewElement->NameCache.size());
+				return nullptr;
+			}
+
+			NewElement->Name = NameId;
+
+			return &Block.Data[OutIndices.second];
+		}
+
+		DCBlockArray<ElementItem, CElementSize>& GetElementsContainerForNewElements(INT Count, WORD& Out_Index)noexcept {
+			//Try to find block that will contain all elements
+			for (size_t i = 0; i < Elements.Data.size(); i++)
+			{
+				if (Elements.Data[i].CanWrite(Count)) {
+
+					Out_Index = (WORD)(i);
+
+					return Elements.Data[i];
+				}
+			}
+
+			//Create new block array and reserve max
+			Elements.Data.push_back(DCBlockArray<ElementItem, CElementSize>());
+			Elements.Data.back().Data.reserve(CElementsBlockSize);
+			Elements.Data.back().MaxCount = CElementsBlockSize;
+
+			Elements.Count++;
+
+			Out_Index = (WORD)(Elements.Data.size() - 1);
+
+			return Elements.Data.back();
+		}
+		DCBlockArray<AttributeItem, CAttributeSize>& GetAttributesContainerForNewAttributes(INT Count, WORD& Out_Index)noexcept {
+			//Try to find block that will contain all attributes
+			for (size_t i = 0; i < Attributes.Data.size(); i++)
+			{
+				if (Attributes.Data[i].CanWrite(Count)) {
+
+					Out_Index = (WORD)(i);
+
+					return Attributes.Data[i];
+				}
+			}
+
+			Out_Index = (WORD)(Attributes.Data.size());
+
+			//Create new block array and reserve max
+			Attributes.Data.push_back(DCBlockArray<AttributeItem, CAttributeSize>());
+
+			Attributes.Data.back().Data.reserve(CAttributesBlockSize);
+			Attributes.Data.back().MaxCount = CAttributesBlockSize;
+
+			Attributes.Count++;
+
+			return Attributes.Data.back();
+
+		}
 
 		bool PrepareAttributes();
 		bool PrepareElements();
 
-		static inline INT ElementsIndex = 0;
+		bool				bIsLoaded = false;
+		DCState				state = DCState::Idle;
+
+		static inline INT	ElementsIndex = 0;
+		static inline INT	AttributesIndex = 0;
 
 		template<DCState StartState, DCState ExitState> friend struct StateGuard;
 	};

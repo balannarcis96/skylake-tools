@@ -28,8 +28,7 @@ namespace DCAdaptors {
 		virtual bool BuildDC(const wchar_t* DirName, TRef<S1DataCenter::S1DataCenter> DataCenter);
 
 	private:
-		wchar_t* ParseElement(wchar_t* Buffer)noexcept;
-		bool ParseXmlFile(const wchar_t* Buffer, size_t BufferLength) noexcept;
+		bool ParseXmlFile(const char* FileName, char* Buffer, size_t BufferLength, ElementItemRaw* Parent) noexcept;
 	};
 }
 
