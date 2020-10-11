@@ -207,7 +207,14 @@ bool DCAdaptors::DCXMLAdaptor::Export(const wchar_t* RootDir)
 
 bool DCAdaptors::DCXMLAdaptor::BuildDC(const wchar_t* DirName, TRef<S1DataCenter::S1DataCenter> DataCenter)
 {
+	S1DataCenter::StateGuard<S1DataCenter::DCState::Building>(DataCenter.Get());
+
 	this->DataCenter = DataCenter;
+
+	if (!DataCenter->PrepareForBuild()) {
+		Message("Failed to prepare string buckets, no memory T_T");
+		return false;
+	}
 
 	std::wstring WDirName = DirName;
 	std::string	 ADirName = std::string(WDirName.begin(), WDirName.end());
@@ -416,12 +423,8 @@ wchar_t* FindElementNameEnding(wchar_t* Buffer) {
 	return nullptr;
 }
 
-wchar_t* DCAdaptors::DCXMLAdaptor::ParseElement(wchar_t* Buffer, S1DataCenter::ElementItem* Element = nullptr) noexcept
+wchar_t* DCAdaptors::DCXMLAdaptor::ParseElement(wchar_t* Buffer) noexcept
 {
-	if (!Element) {
-		Element
-	}
-
 	Buffer = FindChar(Buffer, L'<');
 	if (!Buffer) {
 		return nullptr;
@@ -434,6 +437,11 @@ wchar_t* DCAdaptors::DCXMLAdaptor::ParseElement(wchar_t* Buffer, S1DataCenter::E
 
 	wchar_t* NameEnding = FindElementNameEnding(Buffer);
 	if (!NameEnding) {
+		return nullptr;
+	}
+
+	auto Element = DataCenter->CreateNewElement(Buffer, (size_t)(NameEnding - Buffer));
+	if (!Element) {
 		return nullptr;
 	}
 

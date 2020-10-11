@@ -78,19 +78,6 @@ bool S1DataCenter::S1DataCenter::Prepare()
 	return true;
 }
 
-S1DataCenter::ElementItem* S1DataCenter::S1DataCenter::CreateNewElement(const wchar_t* Name, size_t NameSize) noexcept
-{
-
-
-
-	return nullptr;
-}
-
-S1DataCenter::AttributeItem* S1DataCenter::S1DataCenter::CreateNewAttribute(const wchar_t* Name, size_t NameSize, const wchar_t* Value, size_t ValueSize) noexcept
-{
-	return nullptr;
-}
-
 bool S1DataCenter::S1DataCenter::PrepareAttributes()
 {
 	for (auto& AttributesBlock : Attributes.Data) {

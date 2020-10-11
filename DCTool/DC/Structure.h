@@ -1,8 +1,60 @@
 #pragma once
 
+struct AttributeItemRaw {
+	std::wstring		Name;
+	std::wstring		Value;
+	WORD				Type;
+
+	AttributeItemRaw() {}
+	AttributeItemRaw(AttributeItemRaw&& other) noexcept {
+		Name = std::move(other.Name);
+		Value = std::move(other.Value);
+		Type = other.Type;
+	}
+	AttributeItemRaw(const AttributeItemRaw&) = delete;
+	AttributeItemRaw& operator=(const AttributeItemRaw&) = delete;
+	AttributeItemRaw& operator=(AttributeItemRaw&& other) noexcept {
+		if (&other == this) {
+			return *this;
+		}
+
+		Name = std::move(other.Name);
+		Value = std::move(other.Value);
+		Type = other.Type;
+
+		return *this;
+	}
+};
+struct ElementItemRaw {
+	std::wstring Name;
+
+	std::vector<AttributeItemRaw> Attributes;
+	std::vector<ElementItemRaw> Children;
+
+	ElementItemRaw() {}
+	ElementItemRaw(ElementItemRaw&& other) noexcept {
+		Name = std::move(other.Name);
+	}
+	ElementItemRaw(const ElementItemRaw&) = delete;
+	ElementItemRaw& operator=(const ElementItemRaw&) = delete;
+	ElementItemRaw& operator=(ElementItemRaw&& other) noexcept {
+		if (&other == this) {
+			return *this;
+		}
+
+		Name = std::move(other.Name);
+
+		return *this;
+	}
+};
+
 namespace S1DataCenter {
+	// CRC 32 polynomial.
+#define CRC32_POLY 0x04c11db7
 
 	constexpr size_t			CElementsBlockSize = 65536;
+	constexpr size_t			CAttributesBlockSize = 65536;
+	constexpr size_t			CStringsBlockSize = 65536;
 
 #if DC_64
 	constexpr size_t			CAttributeSize = 12;
@@ -12,12 +64,12 @@ namespace S1DataCenter {
 	constexpr size_t			CElementSize = 16;
 #endif
 
-
 	enum class DCState {
 		Idle,
 		Serializing,
 		Preparing,
-		Dumping
+		Dumping,
+		Building
 	};
 
 	template<DCState StartState, DCState ExitState = DCState::Idle>
@@ -29,25 +81,10 @@ namespace S1DataCenter {
 	};
 
 	enum AttributeType : WORD {
-		AttributeType_None = 0,
-		AttributeType_1 = 1 << 0,
-		AttributeType_2 = 1 << 1,
-		AttributeType_3 = 1 << 2,
-		AttributeType_4 = 1 << 3,
-		AttributeType_5 = 1 << 4,
-		AttributeType_6 = 1 << 5,
-		AttributeType_7 = 1 << 6,
-		AttributeType_8 = 1 << 7,
-		AttributeType_9 = 1 << 8,
-		AttributeType_10 = 1 << 9,
-		AttributeType_11 = 1 << 10,
-		AttributeType_12 = 1 << 11,
-		AttributeType_13 = 1 << 12,
-		AttributeType_14 = 1 << 13,
-		AttributeType_15 = 1 << 14,
-		AttributeType_16 = 1 << 15,
-
-		AttributeType_String = AttributeType_1 | AttributeType_2
+		AttributeType_Invalid = 0,
+		AttributeType_Int = 1,
+		AttributeType_Float = 2,
+		AttributeType_String = 3,
 	};
 
 	static DWORD LUT[] = { //CRC32 LookUpTable
@@ -103,8 +140,7 @@ namespace S1DataCenter {
 	}
 
 	inline DWORD Crc32(const wchar_t* Data) {
-
-		QWORD Hash = 0;
+		DWORD Hash = 0;
 		while (*Data)
 		{
 			WORD Ch = *Data++;
@@ -136,6 +172,57 @@ namespace S1DataCenter {
 		auto Hash = Crc32(Data);
 
 		return (hashMapSize - 1) & ((Hash >> 16) ^ Hash);
+	}
+
+	//
+	// String CRC, case sensitive.
+	//
+	DWORD appStrCrc(const TCHAR* Data)
+	{
+		DWORD Hash = 0;
+		while (*Data)
+		{
+			WORD Ch = *Data++;
+
+			Hash = (((Hash >> 8)) ^ GCRCTable[(Hash ^ Ch) & 0xFF]);
+			Hash = (((Hash >> 8)) ^ GCRCTable[(Hash ^ (Ch >> 8)) & 0xFF]);
+		}
+
+		return Hash >> 0;
+	}
+
+	//
+	// String CRC, case insensitive.
+	//
+	DWORD appStrCrcCaps(const TCHAR* Data)
+	{
+		DWORD Hash = 0;
+		while (*Data)
+		{
+			WORD Ch = *Data++;
+			switch (Ch)
+			{
+			case 0x9c:
+				Ch = 0x8c;
+				break;
+			case 0xd0:
+			case 0xdf:
+			case 0xf0:
+			case 0xf7:
+				break;
+			case 0xff:
+				Ch = 0x9f;
+				break;
+			default:
+				if ((Ch >= 0x61 && Ch <= 0x7a) || Ch - 0xe0 <= 0x1e) Ch -= 32;
+				break;
+			}
+
+			Hash = (((Hash >> 8)) ^ GCRCTable[(Hash ^ Ch) & 0xFF]);
+			Hash = (((Hash >> 8)) ^ GCRCTable[(Hash ^ (Ch >> 8)) & 0xFF]);
+		}
+
+		return Hash >> 0;
 	}
 
 	template<typename T>
@@ -332,6 +419,41 @@ namespace S1DataCenter {
 
 			return true;
 		};
+
+		//Returns true and index into block where the inserted string starts
+		//Returns false if is full
+		bool InsertString(const wchar_t* String, size_t StringSize, WORD& OutIndex) noexcept {
+			const auto Remaining = BlockSize - UsedSize;
+
+			//Check if it can fit string
+			if (Remaining <= StringSize + 1) {
+				return false;
+			}
+
+			wchar_t* ToReturn = Block.Get() + UsedSize;
+
+			OutIndex = (WORD)UsedSize;
+
+			memcpy_s(ToReturn, sizeof(wchar_t) * StringSize, String, sizeof(wchar_t) * StringSize);
+
+			UsedSize += StringSize;
+
+			Block.Get()[UsedSize] = L'\0';
+
+			UsedSize++;
+
+			return ToReturn;
+		}
+
+		bool AllocateBlock(size_t BlockSize = CStringsBlockSize)noexcept {
+			Block = new wchar_t[BlockSize];
+
+			if (Block.Get()) {
+				this->BlockSize = BlockSize;
+			}
+
+			return Block.Get() != nullptr;
+		}
 
 		~StringBlock() {
 			if (Block.Get()) {
@@ -578,6 +700,8 @@ namespace S1DataCenter {
 
 		StringsBucket(const StringsBucket& other) = delete;
 		StringsBucket& operator=(const StringsBucket& other) = delete;
+
+
 	};
 
 	using DCStringsBuckets = DCBuckets<StringsBucket>;
@@ -658,6 +782,96 @@ namespace S1DataCenter {
 			StringBlocks.Clear();
 			Buckets.Clear();
 			AllStrings.Clear();
+		}
+
+		bool InsertString(const wchar_t* String, size_t StringSize, WORD& StringId) noexcept {
+			std::pair<WORD, WORD> Indices;
+			if (!InsertStringInBlock(String, StringSize, Indices)) {
+				return false;
+			}
+
+			AllStrings.Data.push_back(StringEntry());
+
+			StringId = (WORD)(AllStrings.Data.size() - 1);
+
+			AllStrings.Count++;
+			AllStrings.Data.back().Indices = Indices;
+			AllStrings.Data.back().CachedString = GetString(Indices.first, Indices.second);
+
+			return true;
+		}
+
+		bool InsertString(const wchar_t* String, size_t StringSize, WORD& StringId, std::pair<WORD, WORD>& OutIndices) noexcept {
+			if (!InsertStringInBlock(String, StringSize, OutIndices)) {
+				return false;
+			}
+
+			AllStrings.Data.push_back(StringEntry());
+
+			StringId = (WORD)(AllStrings.Data.size() - 1);
+
+			AllStrings.Count++;
+			AllStrings.Data.back().Indices = OutIndices;
+			AllStrings.Data.back().CachedString = GetString(OutIndices.first, OutIndices.second);
+
+			return true;
+		}
+
+		bool BuildHashTables() noexcept {
+			const DWORD Mask = Buckets.Buckets.size() - 1;
+			DWORD Id = 1;
+
+			for (auto& StringEntry : AllStrings.Data) {
+
+				const DWORD Hash = appStrCrc(StringEntry.CachedString.Get());
+				const DWORD Index = (Hash >> 16 ^ Hash) & Mask;
+
+				Buckets.Buckets[Index].Elements.push_back(StringsBucket::BucketElement());
+
+				auto& HashmapElement = Buckets.Buckets[Index].Elements.back();
+
+				HashmapElement.CachedString = StringEntry.CachedString;
+				HashmapElement.Indices = StringEntry.Indices;
+				HashmapElement.Id = Id++;
+				HashmapElement.Hash = Hash;
+				HashmapElement.Length = wcslen(StringEntry.CachedString.Get()) + 1;
+			}
+
+			//sort all bucket elements by Hash
+			for (size_t i = 0; i < Buckets.Buckets.size(); i++)
+			{
+				std::sort(Buckets.Buckets[i].Elements.begin(), Buckets.Buckets[i].Elements.end(),
+					[](const StringsBucket::BucketElement& a, const StringsBucket::BucketElement& b) -> bool
+					{
+						return a.Hash > b.Hash;
+					});
+			}
+
+			return true;
+		}
+
+	private:
+		bool InsertStringInBlock(const wchar_t* String, size_t StringSize, std::pair<WORD, WORD>& OutIndices)noexcept {
+			for (size_t i = 0; i < StringBlocks.Data.size(); i++) {
+				if (StringBlocks.Data[i].InsertString(String, StringSize, OutIndices.first)) {
+
+					OutIndices.second = (WORD)(i);
+
+					return true;
+				}
+			}
+
+			StringBlocks.Data.push_back(std::move(StringBlock()));
+			StringBlocks.Count++;
+
+			if (!StringBlocks.Data.back().AllocateBlock()) {
+				Message("StringBlock::Failed to allocate block!");
+				return false;
+			}
+
+			OutIndices.second = (WORD)(StringBlocks.Data.size() - 1);
+
+			return StringBlocks.Data.back().InsertString(String, StringSize, OutIndices.first);
 		}
 	};
 
@@ -804,7 +1018,7 @@ namespace S1DataCenter {
 
 	struct AttributeItem : DCSerializable {
 		WORD							NameId = 0;
-		AttributeType					TypeInfo = AttributeType_None;
+		WORD							TypeInfo = 0;
 
 		union {
 			struct {
@@ -818,24 +1032,29 @@ namespace S1DataCenter {
 			};
 		};
 
+#if DC_64
+		DWORD							Padding = 0;
+#endif
+
 		std::wstring					StringyfiedValue;
 
+		//For Building
+		size_t							Index = 0;
+		std::wstring					NameCache;
+		std::pair<WORD, WORD>			LocationCache;
+
 		bool IsValid() const noexcept {
-			return (TypeInfo & 3) != 0;
+			return (TypeInfo & 3) != AttributeType_Invalid;
 		}
 		bool IsInt() const noexcept {
-			return (TypeInfo & 3) == 1;
+			return (TypeInfo & 3) == AttributeType_Int;
 		}
 		bool IsFloat() const noexcept {
-			return (TypeInfo & 3) == 2;
+			return (TypeInfo & 3) == AttributeType_Float;
 		}
 		bool IsString() const noexcept {
-			return (TypeInfo & 3) == 3;
+			return (TypeInfo & 3) == AttributeType_String;
 		}
-
-#if DC_64
-		DWORD					Padding = 0;
-#endif
 
 		TRef<StringBlock>		BlockRef = nullptr;
 		TRef<const wchar_t>		StringRef = nullptr;
@@ -855,6 +1074,9 @@ namespace S1DataCenter {
 			BlockRef = other.BlockRef;
 			StringRef = other.StringRef;
 
+			NameCache = other.NameCache;
+			LocationCache = other.LocationCache;
+			Index = other.Index;
 		}
 		virtual bool Serialize(FIStream& Stream) override {
 			if (Stream.IsLoading()) {
@@ -892,6 +1114,10 @@ namespace S1DataCenter {
 #endif
 			BlockRef = other.BlockRef;
 			StringRef = other.StringRef;
+
+			NameCache = other.NameCache;
+			LocationCache = other.LocationCache;
+			Index = other.Index;
 		}
 
 		bool CacheValue()noexcept {
@@ -932,6 +1158,7 @@ namespace S1DataCenter {
 		std::vector<ElementItem*>			Children;
 
 		std::wstring						NameCache;
+		std::pair<WORD, WORD>				LocationCache;
 
 		ElementItem() {}
 		ElementItem(const ElementItem& other) {
@@ -953,6 +1180,9 @@ namespace S1DataCenter {
 
 			Attributes = other.Attributes;
 			Children = other.Children;
+
+			NameCache = other.NameCache;
+			LocationCache = other.LocationCache;
 		}
 
 		virtual bool Serialize(FIStream& Stream) override {
@@ -1015,6 +1245,9 @@ namespace S1DataCenter {
 
 			Attributes = other.Attributes;
 			Children = other.Children;
+
+			NameCache = other.NameCache;
+			LocationCache = other.LocationCache;
 		}
 
 		std::vector<const ElementItem*> GetChildren(const struct S1DataCenter* DC) const noexcept;
@@ -1025,23 +1258,32 @@ namespace S1DataCenter {
 	};
 
 	struct S1DataCenter : DCSerializable {
-		
-		INT												FormatVersion = 0;
-		UINT64											Unk1_8 = 0;
-		INT												Version = 0;
+		INT														FormatVersion = 0;
+		UINT64													Unk1_8 = 0;
+		INT														Version = 0;
 
-		UnkTree											Unk;
-		DCArray<DCIndex>								Indices;
-		DCArray<DCBlockArray<AttributeItem, 8>>			Attributes;
-		DCArray<DCBlockArray<ElementItem, 16>>			Elements;
-		DCMap											ValuesMap;
-		DCMap											NamesMap;
+		UnkTree													Unk;
+		DCArray<DCIndex>										Indices;
+		DCArray<DCBlockArray<AttributeItem, CAttributeSize>>	Attributes;
+		DCArray<DCBlockArray<ElementItem, CElementSize>>		Elements;
+		DCMap													ValuesMap;
+		DCMap													NamesMap;
 
-		DWORD											EndCount = 0;
+		DWORD													EndCount = 0;
 
 		S1DataCenter() {
 			ValuesMap.Buckets.Count = 1024;
 			NamesMap.Buckets.Count = 512;
+		}
+
+		bool PrepareForBuild()noexcept {
+			for (size_t i = 0; i < ValuesMap.Buckets.Count; i++) {
+				ValuesMap.Buckets.Buckets.push_back(StringsBucket());
+			}
+
+			for (size_t i = 0; i < NamesMap.Buckets.Count; i++) {
+				NamesMap.Buckets.Buckets.push_back(StringsBucket());
+			}
 		}
 
 		virtual bool Serialize(FIStream& Stream) override;
@@ -1061,6 +1303,8 @@ namespace S1DataCenter {
 
 			bIsLoaded = false;
 			state = DCState::Idle;
+
+			ElementsIndex = 0;
 		}
 
 		inline const char* GetDCToolStateStr()noexcept {
@@ -1088,58 +1332,197 @@ namespace S1DataCenter {
 			str += L"_";
 			str += std::to_wstring(Version);
 		}
-
 		void BuildDCExportName(std::string& str) const noexcept {
 			str += "DC";
 			str += "_";
 			str += std::to_string(Version);
 		}
 
-		ElementItem* CreateNewElement(const wchar_t* Name, size_t NameSize)noexcept;
-		AttributeItem* CreateNewAttribute(const wchar_t* Name, size_t NameSize, const wchar_t* Value, size_t ValueSize)noexcept;
-
-	private:
-
-		DCBlockArray<ElementItem, 16>& GetElementsContainerForNewElement()noexcept {
-			if (!Elements.Count) {
-			create_new_block:
-				Elements.Data.push_back(std::move(DCBlockArray<ElementItem, 16>()));
-				Elements.Data.back().Data.reserve(ElementsBlockSize);
-				Elements.Data.back().MaxCount = ElementsBlockSize;
-				
-				Elements.Count++;
-
-				return Elements.Data.back();
+		bool InsertElementTree(ElementItemRaw* Root)noexcept {
+			std::pair<WORD, WORD> LocalRootIndices;
+			auto Element = AllocateElement(*Root, LocalRootIndices);
+			if (!Element) {
+				return false;
 			}
 
-			for (size_t i = 0; i < Elements.Data.size(); i++) {
-				if (Elements.Data[i].CanWrite(1)) {
-					return Elements.Data[i];
-				}
-			}
-
-			goto create_new_block;
+			return InsertElementTreeImpl(Root, Element);
 		}
 
-		DCBlockArray<AttributeItem, 8>& GetAttributesContainerForNewAttribute()noexcept {
-			if (!Elements.Count) {
-			create_new_block:
-				Elements.Data.push_back(std::move(DCBlockArray<ElementItem, 16>()));
-				Elements.Data.back().Data.reserve(ElementsBlockSize);
-				Elements.Data.back().MaxCount = ElementsBlockSize;
+		ElementItem* AllocateElements(std::vector<ElementItemRaw>& RawElements, std::pair<WORD, WORD>& OutIndices)noexcept {
+			auto Block = GetElementsContainerForNewElements((INT)RawElements.size(), OutIndices.first);
 
-				Elements.Count++;
+			//start of this elements block
+			OutIndices.second = (WORD)(Block.Data.size());
 
-				return Elements.Data.back();
+			for (auto& RawElement : RawElements) {
+
+				Block.Data.push_back(ElementItem());
+				Block.UsedCount++;
+
+				//Prepare Element
+				ElementItem* NewElement = &Block.Data.back();
+
+				NewElement->Index = ElementsIndex++;
+				NewElement->LocationCache.first = OutIndices.first;
+				NewElement->LocationCache.second = (WORD)(Block.Data.size() - 1);
+				NewElement->NameCache = std::move(RawElement.Name);
+
+				WORD NameId;
+				if (!NamesMap.InsertString(NewElement->NameCache.data(), NewElement->NameCache.size(), NameId)) {
+					Block.Data.pop_back();
+					continue;
+				}
+
+				NewElement->Name = NameId;
 			}
 
-			for (size_t i = 0; i < Elements.Data.size(); i++) {
-				if (Elements.Data[i].CanWrite(1)) {
+			return &Block.Data[OutIndices.second];
+		}
+		AttributeItem* AllocateAttributes(std::vector<AttributeItemRaw>& RawAttributes, std::pair<WORD, WORD>& OutIndices)noexcept {
+			auto Block = GetAttributesContainerForNewAttributes((INT)RawAttributes.size(), OutIndices.first);
+
+			//start of this attributes block
+			OutIndices.second = (WORD)(Block.Data.size());
+
+			for (auto& RawAttribute : RawAttributes) {
+				Block.Data.push_back(AttributeItem());
+				Block.UsedCount++;
+
+				//Prepare Attribute
+				AttributeItem* NewAttribute = &Block.Data.back();
+
+				NewAttribute->Index = ElementsIndex++;
+				NewAttribute->LocationCache.first = OutIndices.first;
+				NewAttribute->LocationCache.second = (WORD)(Block.Data.size() - 1);
+				NewAttribute->NameCache = std::move(RawAttribute.Name);
+				NewAttribute->StringyfiedValue = std::move(RawAttribute.Value);
+				NewAttribute->TypeInfo = RawAttribute.Type;
+
+				WORD StringId;
+
+				if (RawAttribute.Type == AttributeType_String) {
+					DWORD Crc32 = appStrCrcCaps(NewAttribute->NameCache.c_str());
+					NewAttribute->TypeInfo = (WORD)(((Crc32 << 2) | AttributeType_String) & 0xffff);
+
+					if (!ValuesMap.InsertString(NewAttribute->StringyfiedValue.data(), NewAttribute->StringyfiedValue.size(), StringId, NewAttribute->Indices)) {
+						return nullptr;
+					}
+
+					//StringId not used for attribute value
+				}
+
+				if (!NamesMap.InsertString(NewAttribute->NameCache.data(), NewAttribute->NameCache.size(), StringId)) {
+					return nullptr;
+				}
+
+				NewAttribute->NameId = StringId;
+			}
+
+			return &Block.Data[OutIndices.first];
+		}
+
+		ElementItem* AllocateElement(ElementItemRaw& RawElement, std::pair<WORD, WORD>& OutIndices) {
+			auto Block = GetElementsContainerForNewElements(1, OutIndices.first);
+
+			//start of this elements block
+			OutIndices.second = (WORD)(Block.Data.size());
+
+			Block.Data.push_back(ElementItem());
+			Block.UsedCount++;
+
+			//Prepare Element
+			ElementItem* NewElement = &Block.Data.back();
+
+			NewElement->Index = ElementsIndex++;
+			NewElement->LocationCache.first = OutIndices.first;
+			NewElement->LocationCache.second = (WORD)(Block.Data.size() - 1);
+			NewElement->NameCache = std::move(RawElement.Name);
+
+			WORD NameId;
+			if (!NamesMap.InsertString(NewElement->NameCache.data(), NewElement->NameCache.size(), NameId)) {
+				Block.Data.pop_back();
+				return nullptr;
+			}
+
+			NewElement->Name = NameId;
+
+			return &Block.Data[OutIndices.second];
+		}
+	private:
+		DCBlockArray<ElementItem, CElementSize>& GetElementsContainerForNewElements(INT Count, WORD& Out_Index)noexcept {
+			//Try to find block that will contain all elements
+			for (size_t i = 0; i < Elements.Data.size(); i++)
+			{
+				if (Elements.Data[i].CanWrite(Count)) {
+
+					Out_Index = (WORD)(i);
+
 					return Elements.Data[i];
 				}
 			}
 
-			goto create_new_block;
+			//Create new block array and reserve max
+			Elements.Data.push_back(std::move(DCBlockArray<ElementItem, CElementSize>()));
+			Elements.Data.back().Data.reserve(CElementsBlockSize);
+			Elements.Data.back().MaxCount = CElementsBlockSize;
+
+			Elements.Count++;
+
+			Out_Index = (WORD)(Elements.Data.size() - 1);
+
+			return Elements.Data.back();
+		}
+		DCBlockArray<AttributeItem, CAttributeSize>& GetAttributesContainerForNewAttributes(INT Count, WORD& Out_Index)noexcept {
+			//Try to find block that will contain all attributes
+			for (size_t i = 0; i < Attributes.Data.size(); i++)
+			{
+				if (Attributes.Data[i].CanWrite(Count)) {
+
+					Out_Index = (WORD)(i);
+
+					return Attributes.Data[i];
+				}
+			}
+
+			//Create new block array and reserve max
+			Attributes.Data.push_back(std::move(DCBlockArray<AttributeItem, CAttributeSize>()));
+
+			Attributes.Data.back().Data.reserve(CAttributesBlockSize);
+			Attributes.Data.back().MaxCount = CAttributesBlockSize;
+
+			Attributes.Count++;
+
+			Out_Index = (WORD)(Attributes.Data.size() - 1);
+
+			return Attributes.Data.back();
+
+		}
+
+		bool InsertElementTreeImpl(ElementItemRaw* RawElement, ElementItem* Element)noexcept {
+			if (RawElement->Attributes.size()) {
+				auto AttrStart = AllocateAttributes(RawElement->Attributes, Element->ArgsIndices);
+				if (!AttrStart) {
+					return false;
+				}
+			}
+
+			Element->ArgsCount = (WORD)(RawElement->Attributes.size());
+			Element->ChildCount = (WORD)(RawElement->Children.size());
+
+			if (RawElement->Children.size()) {
+				auto ChildStart = AllocateElements(RawElement->Children, Element->ChildrenIndices);
+				if (!ChildStart) {
+					return false;
+				}
+
+				for (size_t i = 0; i < RawElement->Children.size(); i++) {
+					if (!InsertElementTreeImpl(&RawElement->Children[i], &ChildStart[i])) {
+						return false;
+					}
+				}
+			}
+
+			return true;
 		}
 
 		bool bIsLoaded = false;
@@ -1147,6 +1530,8 @@ namespace S1DataCenter {
 
 		bool PrepareAttributes();
 		bool PrepareElements();
+
+		static inline INT ElementsIndex = 0;
 
 		template<DCState StartState, DCState ExitState> friend struct StateGuard;
 	};
