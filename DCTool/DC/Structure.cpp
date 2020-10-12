@@ -80,9 +80,10 @@ bool S1DataCenter::S1DataCenter::Prepare()
 
 bool S1DataCenter::S1DataCenter::PrepareAttributes()
 {
-	for (auto& AttributesBlock : Attributes.Data) {
-
-		for (auto& Attribute : AttributesBlock.Data) {
+	for (size_t i = 0; i < Attributes.Count; i++) {
+		auto& AttributesBlock = Attributes[i];
+		for (size_t j = 0; j < AttributesBlock.UsedCount; j++) {
+			auto& Attribute = AttributesBlock[j];
 			if (Attribute.IsString()) {
 				Attribute.StringRef = ValuesMap.GetString(Attribute.Indices.first, Attribute.Indices.second);
 			}
@@ -96,7 +97,6 @@ bool S1DataCenter::S1DataCenter::PrepareAttributes()
 				Message("Attribute with name Id 0 ??");
 			}
 		}
-
 	}
 
 	return true;
@@ -104,10 +104,11 @@ bool S1DataCenter::S1DataCenter::PrepareAttributes()
 
 bool S1DataCenter::S1DataCenter::PrepareElements()
 {
-	std::atomic<ElementItem*> LastItem = nullptr;
-	for (auto& ElementsBlock : Elements.Data) {
+	for (size_t i = 0; i < Elements.Count; i++) {
+		auto& ElementsBlock = Elements[i];
 
-		for (auto& Element : ElementsBlock.Data) {
+		for (size_t j = 0; j < ElementsBlock.UsedCount; j++) {
+			auto& Element = ElementsBlock[j];
 
 			if (Element.Name == 0) {
 				continue;
