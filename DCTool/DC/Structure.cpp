@@ -25,6 +25,29 @@ bool S1DataCenter::S1DataCenter::Serialize(FIStream& Stream)
 		return false;
 	}
 
+	std::string FileName = "C:/DC_Indices";
+	FileName += std::to_string(Version);
+	FileName += ".txt";
+	std::ofstream IndicesFile = std::ofstream(FileName.c_str());
+
+	IndicesFile << "TotalCount: " << std::to_string(Indices.Count) << '\n' << '\n';
+
+	for (size_t i = 0; i < Indices.Count; i++) {
+		IndicesFile << std::to_string(Indices.Data[i].Key1);
+		IndicesFile << ' ';
+		IndicesFile << std::to_string(Indices.Data[i].Key2);
+		IndicesFile << ' ';
+		IndicesFile << std::to_string(Indices.Data[i].Key3);
+		IndicesFile << ' ';
+		IndicesFile << std::to_string(Indices.Data[i].Key4);
+		IndicesFile << ' ';
+		IndicesFile << ' ';
+		IndicesFile << ' ';
+		IndicesFile << '\t';
+		IndicesFile << std::to_string(Indices.Data[i].Key);
+		IndicesFile << '\n';
+	}
+
 	if (!Attributes.Serialize(Stream)) {
 		return false;
 	}

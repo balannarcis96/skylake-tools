@@ -214,7 +214,7 @@ void DCTool::RenderUI()
 
 						FIStream DCStream;
 						DCStream._isLoading = false;
-						DCStream.Resize(1024 * 1024 * 512); //512 Mb
+						DCStream.Resize(1024 * 1024 * 1024); //1gb
 
 						if (!DataCenter.Serialize(DCStream)) {
 							Message("Failed to serialize DC!");
@@ -222,8 +222,16 @@ void DCTool::RenderUI()
 						}
 
 						if (CompreseDC) {
-							if (EncryptDC) {
+							if (!CompressDC(DCStream)) {
+								Message("Failed to compress DC");
+								break;
+							}
 
+							if (EncryptDC) {
+								if (!::EncryptDC(DCStream, Key, IV)) {
+									Message("Failed to encrypt DC");
+									break;
+								}
 							}
 						}
 
