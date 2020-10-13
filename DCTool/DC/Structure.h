@@ -745,7 +745,7 @@ namespace S1DataCenter {
 		DCPaddedArray<StringEntry>	AllStrings;
 
 		std::unordered_map<std::wstring, WORD> PresentStrings;
-		std::unordered_map<std::wstring, std::pair<WORD,WORD>> PresentStringsBig;
+		std::unordered_map<std::wstring, std::pair<WORD, WORD>> PresentStringsBig;
 
 		DCMap() {}
 
@@ -1365,28 +1365,38 @@ namespace S1DataCenter {
 			str += std::to_string(Version);
 		}
 
+		ElementItem* GetElement(std::pair<WORD, WORD> indices)noexcept {
+			return &Elements.Data[indices.first].Data[indices.second];
+		}
+		ElementItem* GetElement(WORD blockIndex, WORD itemIndex)noexcept {
+			return &Elements.Data[blockIndex].Data[itemIndex];
+		}
+		AttributeItem* GetAttribute(std::pair<WORD, WORD> indices)noexcept {
+			return &Attributes.Data[indices.first].Data[indices.second];
+		}
+		AttributeItem* GetAttribute(WORD blockIndex, WORD itemIndex)noexcept {
+			return &Attributes.Data[blockIndex].Data[itemIndex];
+		}
+
 		bool InsertElementTree(ElementItemRaw* Root)noexcept {
 			std::pair<WORD, WORD> LocalRootIndices;
-			ElementItem* RootElement = AllocateElement(*Root, LocalRootIndices);
-			if (!RootElement) {
+			if (!AllocateElement(*Root, LocalRootIndices)) {
 				return false;
 			}
 
-			RootElement->ChildCount = (WORD)(Root->Children.size());
+			GetElement(LocalRootIndices)->ChildCount = (WORD)(Root->Children.size());
 
 			if (Root->Children.size()) {
-				ElementItem* RootChildrenStart = AllocateElements(Root->Children, RootElement->ChildrenIndices);
-				if (!RootChildrenStart) {
+				if (!AllocateElements(Root->Children, GetElement(LocalRootIndices)->ChildrenIndices)) {
 					return false;
 				}
 
-				static std::atomic<const wchar_t*> asd;
-
 				//Parse all sub tree
 				for (size_t i = 0; i < Root->Children.size(); i++) {
-					asd.store(Root->Children[i].Name.c_str());
 
-					if (!InsertElementTreeImpl(&Root->Children[i], &RootChildrenStart[i])) {
+					const auto Indices = GetElement(LocalRootIndices)->ChildrenIndices;
+
+					if (!InsertElementTreeImpl(&Root->Children[i], std::pair<WORD, WORD>(Indices.first, Indices.second + i))) {
 						return false;
 					}
 				}
@@ -1396,25 +1406,26 @@ namespace S1DataCenter {
 		}
 
 	private:
-		bool InsertElementTreeImpl(ElementItemRaw* RawElement, ElementItem* Element)noexcept {
+		bool InsertElementTreeImpl(ElementItemRaw* RawElement, std::pair<WORD, WORD> ElementIndices)noexcept {
 			if (RawElement->Attributes.size()) {
-				auto AttrStart = AllocateAttributes(RawElement->Attributes, Element->ArgsIndices);
+				auto AttrStart = AllocateAttributes(RawElement->Attributes, GetElement(ElementIndices)->ArgsIndices);
 				if (!AttrStart) {
 					return false;
 				}
 			}
 
-			Element->ArgsCount = (WORD)(RawElement->Attributes.size());
-			Element->ChildCount = (WORD)(RawElement->Children.size());
+			GetElement(ElementIndices)->ArgsCount = (WORD)(RawElement->Attributes.size());
+			GetElement(ElementIndices)->ChildCount = (WORD)(RawElement->Children.size());
 
 			if (RawElement->Children.size()) {
-				auto ChildStart = AllocateElements(RawElement->Children, Element->ChildrenIndices);
-				if (!ChildStart) {
+				if (!AllocateElements(RawElement->Children, GetElement(ElementIndices)->ChildrenIndices)) {
 					return false;
 				}
 
+				const auto ChildrenIndices = GetElement(ElementIndices)->ChildrenIndices;
+
 				for (size_t i = 0; i < RawElement->Children.size(); i++) {
-					if (!InsertElementTreeImpl(&RawElement->Children[i], &ChildStart[i])) {
+					if (!InsertElementTreeImpl(&RawElement->Children[i], std::pair<WORD, WORD>(ChildrenIndices.first, ChildrenIndices.second + i))) {
 						return false;
 					}
 				}
@@ -1423,7 +1434,7 @@ namespace S1DataCenter {
 			return true;
 		}
 
-		ElementItem* AllocateElements(std::vector<ElementItemRaw>& RawElements, std::pair<WORD, WORD>& OutIndices)noexcept {
+		bool AllocateElements(std::vector<ElementItemRaw>& RawElements, std::pair<WORD, WORD>& OutIndices)noexcept {
 			auto& Block = GetElementsContainerForNewElements((INT)RawElements.size(), OutIndices.first);
 
 			//start of this elements block
@@ -1445,16 +1456,15 @@ namespace S1DataCenter {
 				WORD NameId;
 				if (!NamesMap.InsertString(NewElement->NameCache.data(), NewElement->NameCache.size(), NameId)) {
 					Message("Failed to insert string [%ws]", NewElement->NameCache.c_str());
-					Block.Data.pop_back();
-					continue;
+					return false;
 				}
 
 				NewElement->Name = NameId;
 			}
 
-			return &Block.Data[OutIndices.second];
+			return true;
 		}
-		AttributeItem* AllocateAttributes(std::vector<AttributeItemRaw>& RawAttributes, std::pair<WORD, WORD>& OutIndices)noexcept {
+		bool AllocateAttributes(std::vector<AttributeItemRaw>& RawAttributes, std::pair<WORD, WORD>& OutIndices)noexcept {
 			auto& Block = GetAttributesContainerForNewAttributes((INT)RawAttributes.size(), OutIndices.first);
 
 			//start of this attributes block
@@ -1481,22 +1491,22 @@ namespace S1DataCenter {
 					NewAttribute->TypeInfo = (WORD)(((Crc32 << 2) | AttributeType_String) & 0xffff);
 
 					if (!ValuesMap.InsertString(NewAttribute->StringyfiedValue.data(), NewAttribute->StringyfiedValue.size(), NewAttribute->Indices)) {
-						return nullptr;
+						return false;
 					}
 
 					//StringId not used for attribute value
 				}
 
 				if (!NamesMap.InsertString(NewAttribute->NameCache.data(), NewAttribute->NameCache.size(), StringId)) {
-					return nullptr;
+					return false;
 				}
 
 				NewAttribute->NameId = StringId;
 			}
 
-			return &Block.Data[OutIndices.second];
+			return true;
 		}
-		ElementItem* AllocateElement(ElementItemRaw& RawElement, std::pair<WORD, WORD>& OutIndices) {
+		bool AllocateElement(ElementItemRaw& RawElement, std::pair<WORD, WORD>& OutIndices) {
 			auto& Block = GetElementsContainerForNewElements(1, OutIndices.first);
 
 			//start of this elements block
@@ -1516,12 +1526,12 @@ namespace S1DataCenter {
 			WORD NameId;
 			if (!NamesMap.InsertString(NewElement->NameCache.data(), NewElement->NameCache.size(), NameId)) {
 				Message("AllocateElement::Failed to insert string [%ws]", NewElement->NameCache.size());
-				return nullptr;
+				return false;
 			}
 
 			NewElement->Name = NameId;
 
-			return &Block.Data[OutIndices.second];
+			return true;
 		}
 
 		DCBlockArray<ElementItem, CElementSize>& GetElementsContainerForNewElements(INT Count, WORD& Out_Index)noexcept {
