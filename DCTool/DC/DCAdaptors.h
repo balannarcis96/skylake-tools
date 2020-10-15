@@ -2,8 +2,11 @@
 
 namespace DCAdaptors {
 	struct NOVTABLE DCAdaptor {
-		TRef<S1DataCenter::S1DataCenter>		DataCenter = nullptr;
-		std::vector<std::string>				AllXmlFiles;
+		TRef<S1DataCenter::S1DataCenter>							DataCenter = nullptr;
+		std::vector<std::string>									AllXmlFiles;
+
+		//Used for duplicate checks
+		std::unordered_map<ElementItemRawKey, ElementItemRaw*>		ElementsCache;
 
 		virtual bool FromDC(TRef<S1DataCenter::S1DataCenter> DataCenter) = 0;
 		virtual bool Export(const wchar_t* DirName) = 0;
@@ -12,6 +15,12 @@ namespace DCAdaptors {
 
 		virtual bool SerializeMetadata(const wchar_t* RootDir, INT FilesCount)noexcept;
 		virtual bool ReadMetadata(const wchar_t* File, INT& FilesCount)noexcept;
+
+		virtual void Clear()noexcept {
+			ElementsCache.clear();
+			AllXmlFiles.clear();
+			DataCenter = nullptr;
+		}
 
 		bool FindAllFilesInDirectory(const char* DCDir, const char * extension, std::vector<std::string>& outFiles) const noexcept;
 	};
@@ -29,6 +38,7 @@ namespace DCAdaptors {
 
 	private:
 		bool ParseXmlFile(const char* FileName, char* Buffer, size_t BufferLength, ElementItemRaw* Parent) noexcept;
+		ElementItemRaw* PrepareXMLTree(const char* FileName, rapidxml::xml_node<>* xmlNode)noexcept;
 	};
 }
 

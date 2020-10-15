@@ -8,10 +8,41 @@
 #include <stdio.h>
 #include <unordered_map>
 #include <string_view>
+#include <queue>
 
 #include "../RapidXML/rapidxml.hpp"
 
 std::unordered_map<std::wstring, WORD> AttributeTypes;
+
+std::queue<ElementItemRaw*> RawElementsPool;
+
+void DeleteRawPoolElement(ElementItemRaw* element) noexcept {
+
+	//Call destructor
+	(*element).~ElementItemRaw();
+
+	RawElementsPool.push(element);
+}
+
+struct PoolRawElementDeleter {
+	void operator()(ElementItemRaw* element) const noexcept {
+		DeleteRawPoolElement(element);
+	}
+};
+
+std::unique_ptr<ElementItemRaw, PoolRawElementDeleter> AllocateElement() noexcept {
+	if (!RawElementsPool.size()) {
+		return std::unique_ptr<ElementItemRaw, PoolRawElementDeleter>(new ElementItemRaw());
+	}
+
+	ElementItemRaw* ToReturn = RawElementsPool.front();
+	RawElementsPool.pop();
+
+	//call constructor
+	new(ToReturn) ElementItemRaw();
+
+	return std::unique_ptr<ElementItemRaw, PoolRawElementDeleter>(ToReturn);
+}
 
 wchar_t* PrintElementName(wchar_t* Buffer, S1DataCenter::ElementItem* Element, INT Depth) noexcept {
 	wchar_t* Cursor = Buffer;
@@ -439,11 +470,13 @@ bool DCAdaptors::DCXMLAdaptor::BuildDC(const wchar_t* DirName, TRef<S1DataCenter
 	return true;
 }
 
-bool PrepareXMLTree(const char* FileName, rapidxml::xml_node<>* xmlNode, ElementItemRaw* RawElement)noexcept {
+ElementItemRaw* DCAdaptors::DCXMLAdaptor::PrepareXMLTree(const char* FileName, rapidxml::xml_node<>* xmlNode)noexcept {
 
 	//RawElement->Children.push_back(std::move(ElementItemRaw()));
 
 	//ElementItemRaw* NewElement = &RawElement->Children.back();
+
+	auto RawElement = AllocateElement();
 
 	constexpr size_t CConvertStrSize = (1024 * 1024) * 64;
 
@@ -454,14 +487,14 @@ bool PrepareXMLTree(const char* FileName, rapidxml::xml_node<>* xmlNode, Element
 	INT EndLen = MultiByteToWideChar(CP_UTF8, 0, ConvertView.data(), ConvertSize, ConvertStr, 4096);
 	if (!EndLen) {
 		Message("Failed to convert element name to UTF16 File:[%s] name[%s]", FileName, ConvertView.data());
-		return false;
+		return nullptr;
 	}
 	ConvertStr[EndLen] = L'\0';
 
 	RawElement->Name = std::move(ConvertStr);
 
 	//Prepare attributes
-	for (rapidxml::xml_attribute<>* attr = xmlNode->first_attribute(); attr != NULL; attr = attr->next_attribute())
+	for (rapidxml::xml_attribute<>* attr = xmlNode->first_attribute(); attr != nullptr; attr = attr->next_attribute())
 	{
 		ConvertView = attr->name();
 		ConvertSize = ConvertView.size();
@@ -469,7 +502,7 @@ bool PrepareXMLTree(const char* FileName, rapidxml::xml_node<>* xmlNode, Element
 		EndLen = EndLen = MultiByteToWideChar(CP_UTF8, 0, ConvertView.data(), ConvertSize, ConvertStr, 4096);
 		if (!EndLen) {
 			Message("Failed to convert element name to UTF16 File:[%s] name[%s]", FileName, ConvertView.data());
-			return false;
+			return nullptr;
 		}
 		ConvertStr[EndLen] = L'\0';
 
@@ -480,7 +513,7 @@ bool PrepareXMLTree(const char* FileName, rapidxml::xml_node<>* xmlNode, Element
 		auto Type = AttributeTypes.find(AttributeFullName);
 		if (Type == AttributeTypes.end()) {
 			Message("Could not find type for attribute [%ws] in File [%s]", AttributeFullName.c_str(), FileName);
-			return false;
+			return nullptr;
 		}
 
 		RawElement->Attributes.push_back(std::move(AttributeItemRaw()));
@@ -493,7 +526,7 @@ bool PrepareXMLTree(const char* FileName, rapidxml::xml_node<>* xmlNode, Element
 			EndLen = MultiByteToWideChar(CP_UTF8, 0, ConvertView.data(), ConvertSize, ConvertStr, CConvertStrSize);
 			if (!EndLen) {
 				Message("Failed to convert attr value to UTF16 File:[%s] value[%s]", FileName, ConvertView.data());
-				return false;
+				return nullptr;
 			}
 			ConvertStr[EndLen] = L'\0';
 		}
@@ -505,18 +538,43 @@ bool PrepareXMLTree(const char* FileName, rapidxml::xml_node<>* xmlNode, Element
 		RawElement->Attributes.back().Type = Type->second;
 	}
 
-	//Prepare children
-	for (rapidxml::xml_node<>* child = xmlNode->first_node(); child != NULL; child = child->next_sibling())
-	{
-		RawElement->Children.push_back(std::move(ElementItemRaw()));
+	//Sort attributes by name
+	std::sort(RawElement->Attributes.begin(), RawElement->Attributes.end(),
+		[](const AttributeItemRaw& left, const AttributeItemRaw& right) {
+			return left.Name.compare(right.Name) >= 0;
+		});
 
-		if (!PrepareXMLTree(FileName, child, &RawElement->Children.back())) {
+	//Prepare children
+	for (rapidxml::xml_node<>* child = xmlNode->first_node(); child != nullptr; child = child->next_sibling())
+	{
+		if ((RawElement->Children.push_back(PrepareXMLTree(FileName, child)), RawElement->Children.back() == nullptr)) {
 			Message("Failed to prepare node [%s] in File [%s]", child->name(), FileName);
-			return false;
+			return nullptr;
 		}
+
+		//add ref for the new element
+		RawElement->Children.back()->AddReference();
+
+		RawElement->BuildHash();
 	}
 
-	return true;
+	//Sort children by name
+	std::sort(RawElement->Children.begin(), RawElement->Children.end(),
+		[](const ElementItemRaw* left, const ElementItemRaw* right) {
+			return left->Name.compare(right->Name) >= 0;
+		});
+
+	auto Key = std::move(RawElement->BuildKey());
+
+	auto Item = ElementsCache.find(Key);
+	if (Item != ElementsCache.end()) {
+		return Item->second;
+	}
+	else {
+		ElementsCache.insert(std::move(std::pair<ElementItemRawKey, ElementItemRaw*>(std::move(Key), RawElement.get())));
+	}
+
+	return RawElement.release();
 }
 
 bool DCAdaptors::DCXMLAdaptor::ParseXmlFile(const char* FileName, char* Buffer, size_t BufferLength, ElementItemRaw* Parent) noexcept
@@ -530,9 +588,13 @@ bool DCAdaptors::DCXMLAdaptor::ParseXmlFile(const char* FileName, char* Buffer, 
 		return false;
 	}
 
-	Parent->Children.push_back(std::move(ElementItemRaw()));
+	if ((Parent->Children.push_back(PrepareXMLTree(FileName, XmlDoc->first_node())), !Parent->Children.back())) {
+		return false;
+	}
 
-	return PrepareXMLTree(FileName, XmlDoc->first_node(), &Parent->Children.back());
+	Parent->Children.back()->AddReference();
+
+	return true;
 }
 
 bool DCAdaptors::DCAdaptor::SerializeMetadata(const wchar_t* RootDir, INT FilesCount) noexcept
@@ -552,11 +614,55 @@ bool DCAdaptors::DCAdaptor::SerializeMetadata(const wchar_t* RootDir, INT FilesC
 	}
 
 	Stream.WriteU_int64(AttributeTypes.size());
-
-	for (auto& Item : AttributeTypes) {
+	for (const auto& Item : AttributeTypes) {
 		Stream.WriteU_int64(Item.first.size() * 2);
 		Stream.Write((uint8_t*)Item.first.data(), Item.first.size() * 2);
 		Stream.WriteUInt16(Item.second);
+	}
+
+	for (const auto& Item : DataCenter->CachedElementIndices) {
+		//Write name
+		Stream.WriteU_int64(Item.first.size() * 2);
+		Stream.Write((uint8_t*)Item.first.data(), Item.first.size() * 2);
+
+		if (Item.second.Name1.Get()) {
+			const auto NameSize = wcslen(Item.second.Name1.Get());
+			Stream.WriteU_int64(NameSize * 2);
+			Stream.Write((uint8_t*)Item.second.Name1.Get(), NameSize * 2);
+		}
+		else {
+			Stream.WriteU_int64(0);
+		}
+
+		if (Item.second.Name2.Get()) {
+			const auto NameSize = wcslen(Item.second.Name2.Get());
+			Stream.WriteU_int64(NameSize * 2);
+			Stream.Write((uint8_t*)Item.second.Name2.Get(), NameSize * 2);
+		}
+		else {
+			Stream.WriteU_int64(0);
+		}
+
+		if (Item.second.Name3.Get()) {
+			const auto NameSize = wcslen(Item.second.Name3.Get());
+			Stream.WriteU_int64(NameSize * 2);
+			Stream.Write((uint8_t*)Item.second.Name3.Get(), NameSize * 2);
+		}
+		else {
+			Stream.WriteU_int64(0);
+		}
+
+		if (Item.second.Name4.Get()) {
+			const auto NameSize = wcslen(Item.second.Name4.Get());
+			Stream.WriteU_int64(NameSize * 2);
+			Stream.Write((uint8_t*)Item.second.Name4.Get(), NameSize * 2);
+		}
+		else {
+			Stream.WriteU_int64(0);
+		}
+
+		Stream.WriteUInt16(Item.second.Index);
+		Stream.WriteUInt16(Item.second.Flags);
 	}
 
 	std::wstring WRootDir = RootDir;
@@ -594,7 +700,7 @@ bool DCAdaptors::DCAdaptor::ReadMetadata(const wchar_t* File, INT& FilesCount) n
 
 	auto AttributeTypeNameBuffer = std::unique_ptr<wchar_t>(new wchar_t[1024]);
 
-	size_t AttributeTypesSize = Stream.ReadUInt64();
+	const size_t AttributeTypesSize = Stream.ReadUInt64();
 	for (size_t i = 0; i < AttributeTypesSize; i++) {
 		size_t StrLength = Stream.ReadUInt64();
 		Stream.Read((uint8_t*)AttributeTypeNameBuffer.get(), StrLength);
@@ -602,6 +708,50 @@ bool DCAdaptors::DCAdaptor::ReadMetadata(const wchar_t* File, INT& FilesCount) n
 		WORD AttrType = Stream.ReadUInt16();
 
 		AttributeTypes.insert(std::pair<std::wstring, WORD>(std::wstring(AttributeTypeNameBuffer.get(), StrLength / 2), AttrType));
+	}
+
+	const size_t IndicesSize = Stream.ReadUInt64();
+	for (size_t i = 0; i < IndicesSize; i++)
+	{
+		CachedElementIndex CachedIndex;
+
+		//Element Name
+		size_t StrLength = Stream.ReadUInt64();
+		CachedIndex.ElementNameCache = std::wstring(Stream.Cast<wchar_t>(), StrLength);
+		Stream._pos += StrLength;
+
+		//Name1
+		StrLength = Stream.ReadUInt64();
+		if (StrLength) {
+			CachedIndex.NameCache1 = std::wstring(Stream.Cast<wchar_t>(), StrLength);
+			Stream._pos += StrLength;
+		}
+
+		//Name2
+		StrLength = Stream.ReadUInt64();
+		if (StrLength) {
+			CachedIndex.NameCache2 = std::wstring(Stream.Cast<wchar_t>(), StrLength);
+			Stream._pos += StrLength;
+		}
+
+		//Name3
+		StrLength = Stream.ReadUInt64();
+		if (StrLength) {
+			CachedIndex.NameCache3 = std::wstring(Stream.Cast<wchar_t>(), StrLength);
+			Stream._pos += StrLength;
+		}
+
+		//Name4
+		StrLength = Stream.ReadUInt64();
+		if (StrLength) {
+			CachedIndex.NameCache4 = std::wstring(Stream.Cast<wchar_t>(), StrLength);
+			Stream._pos += StrLength;
+		}
+
+		CachedIndex.Index = Stream.ReadUInt16();
+		CachedIndex.Flags = Stream.ReadUInt16();
+
+		DataCenter->CachedElementIndices.insert({ CachedIndex.ElementNameCache, std::move(CachedIndex) });
 	}
 
 	auto result = AttributeTypes.find(L"String.id");

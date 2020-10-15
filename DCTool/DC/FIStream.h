@@ -69,6 +69,11 @@ struct FIStream
 	std::string			ReadASCIIString();
 	bool				ReadASCIIStringTo(uint8* out, uint16 max_len);
 
+	template<typename T>
+	T* Cast()noexcept {
+		return (T*)(_raw + _pos);
+	}
+
 	void				Acquire(FIStream& other) {
 		_raw = other._raw;
 		_size = other._size;

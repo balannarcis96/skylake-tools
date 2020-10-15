@@ -97,7 +97,7 @@ bool FIStream::load_from_file(const wchar_t* file) {
 bool FIStream::save_to_file(const char * fileName)
 {
 	std::ofstream file;
-	file.open(fileName, std::ofstream::binary | std::ofstream::out);
+	file.open(fileName, std::ofstream::binary);
 	if (!file.is_open()) {
 		Message("FIStream::ofstream::open error[%s]", strerror(errno));
 		return false;

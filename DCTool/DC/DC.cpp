@@ -72,11 +72,11 @@ bool UncompressDC(FIStream& Stream) {
 
 bool CompressDC(FIStream& Stream) {
 
-	UINT UncompressedSize = Stream._size;
-	INT CompressedSize = (INT)Stream._size;
+	UINT UncompressedSize = Stream._pos;
+	INT CompressedSize = (INT)Stream._pos;
 	auto buffer = std::unique_ptr<char[]>(new char[CompressedSize]);
 
-	if (!appCompressMemoryZLIB(buffer.get(), CompressedSize, (const void*)(Stream._raw), Stream._size)) {
+	if (!appCompressMemoryZLIB(buffer.get(), CompressedSize, (const void*)(Stream._raw), Stream._pos)) {
 		return false;
 	}
 
@@ -84,6 +84,10 @@ bool CompressDC(FIStream& Stream) {
 	Stream.Resize(CompressedSize + 4);
 	Stream.WriteUInt32(UncompressedSize);
 	Stream.Write((BYTE*)buffer.get(), CompressedSize);
+
+	//make blob multiple of 16
+	const auto Rest = Stream._pos % 16;
+	for (size_t i = 0; i < 16 - Rest; i++) { Stream.WriteUInt8(0); }
 
 	return true;
 }
@@ -174,7 +178,7 @@ void DCTool::RenderUI()
 					ImGui::SameLine();
 					ImGui::Checkbox("Encrypt", &EncryptDC);
 				}
-			
+
 				ImGui::NewLine();
 				if (ImGui::Button("Build DC")) {
 					DataCenter.Clear();
@@ -240,7 +244,7 @@ void DCTool::RenderUI()
 						std::string DCFileName = ImportBasePath;
 						DCFileName += "/DC_";
 						DCFileName += std::to_string(DataCenter.Version);
-						DCFileName += ".bin";
+						DCFileName += ".dat";
 
 						if (!DCStream.save_to_file(DCFileName.c_str())) {
 							Message("Failed to save DC file [%s]!", DCFileName.c_str());

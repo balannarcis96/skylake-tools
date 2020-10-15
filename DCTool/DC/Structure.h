@@ -1,11 +1,20 @@
 #pragma once
 
+#include <sstream>
 #include <unordered_map>
 #include <array>
+
+enum AttributeType : WORD {
+	AttributeType_Invalid = 0,
+	AttributeType_Int = 1,
+	AttributeType_Float = 2,
+	AttributeType_String = 3,
+};
 
 struct AttributeItemRaw {
 	std::wstring		Name;
 	std::wstring		Value;
+	QWORD				Hash = 0;
 	WORD				Type;
 
 	AttributeItemRaw() {}
@@ -13,6 +22,7 @@ struct AttributeItemRaw {
 		Name = std::move(other.Name);
 		Value = std::move(other.Value);
 		Type = other.Type;
+		Hash = other.Hash;
 	}
 	AttributeItemRaw(const AttributeItemRaw&) = delete;
 	AttributeItemRaw& operator=(const AttributeItemRaw&) = delete;
@@ -24,38 +34,252 @@ struct AttributeItemRaw {
 		Name = std::move(other.Name);
 		Value = std::move(other.Value);
 		Type = other.Type;
+		Hash = other.Hash;
 
 		return *this;
 	}
-};
-struct ElementItemRaw {
-	std::wstring Name;
 
-	std::vector<AttributeItemRaw> Attributes;
-	std::vector<ElementItemRaw> Children;
-
-	ElementItemRaw() {}
-	ElementItemRaw(ElementItemRaw&& other) noexcept {
-		Name = std::move(other.Name);
-
-		Attributes = std::move(other.Attributes);
-		Children = std::move(other.Children);
+	void BuildHash() noexcept {
+		Hash = (appStrihash(Name.c_str()) << 32) | ((appStrihash(Value.c_str()) << 3) | (Type & 3));
 	}
-	ElementItemRaw(const ElementItemRaw&) = delete;
-	ElementItemRaw& operator=(const ElementItemRaw&) = delete;
-	ElementItemRaw& operator=(ElementItemRaw&& other) noexcept {
+	QWORD GetHash() const noexcept {
+		return Hash;
+	}
+};
+
+struct ElementItemRawKey {
+	std::vector<QWORD>					 AttributesHashes;
+	std::vector<QWORD>					 ChildrenHashes;
+	const struct ElementItemRaw* Element = nullptr;
+
+	bool operator==(const ElementItemRawKey& other) const
+	{
+		if (ChildrenHashes.size() != other.ChildrenHashes.size() ||
+			AttributesHashes.size() != other.AttributesHashes.size()) {
+			return false;
+		}
+
+		//Should catch different sizes for attributes and children arrays (children are sorted by name this wont be affected by out of order identical children)
+		for (size_t i = 0; i < ChildrenHashes.size(); i++)
+		{
+			if (ChildrenHashes[i] != other.ChildrenHashes[i]) {
+				return false;
+			}
+		}
+
+		//compare the attributes individually (the attribute array is sorted by name so this has a even chance to be duplicate)
+		for (size_t i = 0; i < AttributesHashes.size(); i++)
+		{
+			if (AttributesHashes[i] != other.AttributesHashes[i]) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	ElementItemRawKey() {}
+	ElementItemRawKey(ElementItemRawKey&& other) noexcept {
+		AttributesHashes = std::move(other.AttributesHashes);
+		ChildrenHashes = std::move(other.ChildrenHashes);
+
+		Element = other.Element;
+	}
+	ElementItemRawKey& operator=(ElementItemRawKey&& other) noexcept {
 		if (&other == this) {
 			return *this;
 		}
 
-		Name = std::move(other.Name);
+		AttributesHashes = std::move(other.AttributesHashes);
+		ChildrenHashes = std::move(other.ChildrenHashes);
 
-		Attributes = std::move(other.Attributes);
-		Children = std::move(other.Children);
+		Element = other.Element;
 
 		return *this;
 	}
+
+	ElementItemRawKey(const ElementItemRawKey&) = delete;
+	ElementItemRawKey& operator=(const ElementItemRawKey&) = delete;
 };
+struct ElementItemRaw {
+	std::wstring					Name;
+
+	std::vector<AttributeItemRaw>	Attributes;
+	std::vector<ElementItemRaw*>	Children;
+
+	TRef<ElementItemRaw>			DuplicateOf = nullptr;
+
+	QWORD							Hash = 0;
+
+	//Start with 0 references (not part of a tree)
+	INT								ReferenceCount = 0;
+
+	std::pair<WORD, WORD>			CachedDCElementIndices = { 0xFFFF,0xFFFF };
+
+	bool							Used = false;
+
+	~ElementItemRaw() {
+		for (size_t i = 0; i < Children.size(); i++)
+		{
+			Children[i]->RemoveReference();
+			Children[i] = nullptr;
+		}
+
+		Children.clear();
+	}
+
+	void AddReference() noexcept { ReferenceCount++; }
+	bool RemoveReference() noexcept {
+		extern void DeleteRawPoolElement(ElementItemRaw*) noexcept;
+		if (!--ReferenceCount) {
+			DeleteRawPoolElement(this);
+
+			return true;
+		}
+
+		return false;
+	}
+
+	ElementItemRaw() {}
+	ElementItemRaw(ElementItemRaw&& other) = delete;
+	ElementItemRaw(const ElementItemRaw&) = delete;
+	ElementItemRaw& operator=(const ElementItemRaw&) = delete;
+	ElementItemRaw& operator=(ElementItemRaw&& other) = delete;
+
+	bool HasValidDCIndices() const noexcept {
+		return *(INT*)(&CachedDCElementIndices) != -1;
+	}
+
+	void BuildHash()noexcept {
+		if (Hash) {
+			return;
+		}
+
+		Hash = ((Children.size() + Attributes.size()) << 32) | ((QWORD)appStrihash(Name.c_str()));
+	}
+	QWORD GetHash() const noexcept {
+		return Hash;
+	}
+
+	ElementItemRawKey BuildKey() const noexcept {
+		ElementItemRawKey ToReturn;
+
+		if (Attributes.size()) {
+			ToReturn.AttributesHashes.reserve(Attributes.size());
+
+			for (const auto& attr : Attributes) {
+				ToReturn.AttributesHashes.push_back(attr.GetHash());
+			}
+		}
+
+		if (Children.size()) {
+			ToReturn.ChildrenHashes.reserve(Children.size());
+
+			for (const auto* child : Children) {
+				ToReturn.ChildrenHashes.push_back(child->GetHash());
+			}
+		}
+
+		ToReturn.Element = this;
+
+		return std::move(ToReturn);
+	}
+};
+
+struct CachedElementIndex {
+	//For saving
+	TRef<const wchar_t>		Name1 = nullptr;
+	TRef<const wchar_t>		Name2 = nullptr;
+	TRef<const wchar_t>		Name3 = nullptr;
+	TRef<const wchar_t>		Name4 = nullptr;
+	TRef<const wchar_t>		ElementNameCacheRef = nullptr;
+
+	//For building
+	std::wstring			ElementNameCache;
+	std::wstring			NameCache1;
+	std::wstring			NameCache2;
+	std::wstring			NameCache3;
+	std::wstring			NameCache4;
+
+	UINT64					Keys = 0;
+
+	//Shared
+	WORD					Index = 0;
+	WORD					Flags = 0;
+
+	CachedElementIndex() {}
+	CachedElementIndex(CachedElementIndex&& other) noexcept {
+		Name1 = other.Name1;
+		Name2 = other.Name2;
+		Name3 = other.Name3;
+		Name4 = other.Name4;
+
+		Index = other.Index;
+		Flags = other.Flags;
+		Keys = other.Keys;
+
+		ElementNameCache = std::move(other.ElementNameCache);
+		NameCache1 = std::move(other.NameCache1);
+		NameCache2 = std::move(other.NameCache2);
+		NameCache3 = std::move(other.NameCache3);
+		NameCache4 = std::move(other.NameCache4);
+
+		other.Name1 = nullptr;
+		other.Name2 = nullptr;
+		other.Name3 = nullptr;
+		other.Name4 = nullptr;
+		other.Index = 0;
+		other.Flags = 0;
+		other.Keys = 0;
+	}
+	CachedElementIndex& operator=(CachedElementIndex&& other) noexcept {
+		if (&other == this) {
+			return *this;
+		}
+
+		Name1 = other.Name1;
+		Name2 = other.Name2;
+		Name3 = other.Name3;
+		Name4 = other.Name4;
+
+		Index = other.Index;
+		Flags = other.Flags;
+		Keys = other.Keys;
+
+		ElementNameCache = std::move(other.ElementNameCache);
+		NameCache1 = std::move(other.NameCache1);
+		NameCache2 = std::move(other.NameCache2);
+		NameCache3 = std::move(other.NameCache3);
+		NameCache4 = std::move(other.NameCache4);
+
+		other.Name1 = nullptr;
+		other.Name2 = nullptr;
+		other.Name3 = nullptr;
+		other.Name4 = nullptr;
+		other.Index = 0;
+		other.Flags = 0;
+		other.Keys = 0;
+
+		return *this;
+	}
+
+	CachedElementIndex(const CachedElementIndex&) = delete;
+	CachedElementIndex& operator=(const CachedElementIndex&) = delete;
+};
+
+namespace std {
+	template <>
+	struct hash<ElementItemRawKey>
+	{
+		std::size_t operator()(const ElementItemRawKey& key) const noexcept
+		{
+			return key.Element->GetHash();
+		}
+	};
+}
+
+#define ELEMENT_INDEX_VALUE_MASK 0xFFF0
+#define ELEMENT_INDEX_FLAGS_MASK 0x000F
 
 namespace S1DataCenter {
 	constexpr size_t			CElementsBlockSize = 65536;
@@ -84,13 +308,6 @@ namespace S1DataCenter {
 		~StateGuard();
 	private:
 		TRef<S1DataCenter> dc;
-	};
-
-	enum AttributeType : WORD {
-		AttributeType_Invalid = 0,
-		AttributeType_Int = 1,
-		AttributeType_Float = 2,
-		AttributeType_String = 3,
 	};
 
 	//
@@ -345,8 +562,6 @@ namespace S1DataCenter {
 		DWORD										Count = 0;
 		std::vector<T>								Buckets;
 
-		TRef<DCStringBlocks>						Blocks = nullptr;
-
 		virtual bool Serialize(FIStream& Stream) override {
 			if (!Count) {
 				return true;
@@ -358,8 +573,6 @@ namespace S1DataCenter {
 				for (size_t i = 0; i < Count; i++)
 				{
 					T Bucket;
-
-					Bucket.Blocks = Blocks;
 
 					if (!Bucket.Serialize(Stream)) {
 						return false;
@@ -378,58 +591,6 @@ namespace S1DataCenter {
 			}
 
 			return true;
-		}
-
-		inline const T& GetBucket(const wchar_t* string) const noexcept {
-			const auto Hash = MapString(string);
-			const auto Index = GetMappedIndex(Hash, Count);
-
-			return Buckets[Index];
-		}
-		inline const wchar_t* GetElement(const wchar_t* string) const noexcept {
-			const auto Hash = Crc32(string);
-			const auto Index = GetMappedIndex(Hash, Count);
-
-			return Buckets[Index].GetElement(Hash);
-		}
-		inline const T& GetElementEx(const wchar_t* Data, DWORD& OutHash) const noexcept {
-			OutHash = 0;
-
-			while (*Data)
-			{
-				TCHAR Ch = *Data++;
-				switch (Ch)
-				{
-				case 0x9c:
-					Ch = 0x8c;
-					break;
-				case 0xd0:
-				case 0xdf:
-				case 0xf0:
-				case 0xf7:
-					break;
-				case 0xff:
-					Ch = 0x9f;
-					break;
-				default:
-					if ((Ch >= 0x61 && Ch <= 0x7a) || Ch - 0xe0 <= 0x1e) Ch -= 32;
-					break;
-				}
-
-				DWORD Temp = (((OutHash >> 8)) ^ GCRCTable[(OutHash ^ Ch) & 0xFF]);
-				OutHash = (((Temp >> 8)) ^ GCRCTable[(Temp ^ (Ch >> 8)) & 0xFF]);
-			}
-
-			const DWORD Index = (((OutHash >> 16) ^ OutHash) & (Count - 1));
-
-			return Buckets[Index];
-		}
-
-		inline const TRef<T> GetBucket(INT Index)const noexcept {
-			return Buckets.size() ? &Buckets[Index] : nullptr;
-		}
-		inline const TRef<StringBlock> GetStringBlock(INT Index)const noexcept {
-			return Blocks.Get() ? &Blocks->Data[Index] : nullptr;
 		}
 
 		void Clear() noexcept {
@@ -495,6 +656,7 @@ namespace S1DataCenter {
 
 				return true;
 			}
+
 		};
 
 		DWORD										Count = 0;
@@ -574,17 +736,22 @@ namespace S1DataCenter {
 		StringsBucket(const StringsBucket& other) = delete;
 		StringsBucket& operator=(const StringsBucket& other) = delete;
 
-
+		void Clear() noexcept {
+			Count = 0;
+			Elements.clear();
+		}
 	};
 
 	using DCStringsBuckets = DCBuckets<StringsBucket>;
 
 	struct DCMap : DCSerializable {
 		struct StringEntry : DCSerializable {
-			std::pair<WORD, WORD>			Indices = { 0,0 };
+			std::pair<WORD, WORD>				Indices = { 0,0 };
 
 			//Ref
-			TRef<const wchar_t>				CachedString = nullptr;
+			TRef<const wchar_t>					CachedString = nullptr;
+
+			std::vector<struct ElementItem*>	RefElements;
 
 			StringEntry() {}
 			StringEntry(StringEntry&& other)noexcept {
@@ -635,16 +802,10 @@ namespace S1DataCenter {
 			return &Block[StringIndex];
 		}
 
-		std::atomic<DWORD> asd;
-
 		bool Prepare() noexcept {
 			for (auto& Bucket : Buckets.Buckets) {
 				for (auto& BucketElement : Bucket.Elements) {
 					BucketElement.CachedString = &(StringBlocks.Data[BucketElement.Indices.first].Block.Get())[BucketElement.Indices.second];
-
-					if (!_wcsicmp(BucketElement.CachedString.Get(), L"__root__")) {
-						asd.store(BucketElement.Id);
-					}
 				}
 			}
 
@@ -681,7 +842,8 @@ namespace S1DataCenter {
 
 			AllStrings.Data.push_back(StringEntry());
 
-			StringId = (WORD)(AllStrings.Data.size() - 1);
+			//return 1 based index
+			StringId = (WORD)(AllStrings.Data.size());
 
 			AllStrings.Count++;
 			AllStrings.Data.back().Indices = Indices;
@@ -691,6 +853,8 @@ namespace S1DataCenter {
 
 			return true;
 		}
+
+		bool InsertStringForElement(struct ElementItem* Element, const wchar_t* String, size_t StringSize, WORD& StringId) noexcept;
 
 		bool InsertString(const wchar_t* String, size_t StringSize, std::pair<WORD, WORD>& OutIndices) noexcept {
 			auto Item = PresentStringsBig.find(String);
@@ -736,16 +900,6 @@ namespace S1DataCenter {
 				HashmapElement.Length = wcslen(StringEntry.CachedString.Get()) + 1;
 			}
 
-			//sort all bucket elements by Hash
-			for (size_t i = 0; i < Buckets.Buckets.size(); i++)
-			{
-				std::sort(Buckets.Buckets[i].Elements.begin(), Buckets.Buckets[i].Elements.end(),
-					[](const StringsBucket::BucketElement& a, const StringsBucket::BucketElement& b) -> bool
-					{
-						return a.Hash > b.Hash;
-					});
-			}
-
 			return true;
 		}
 
@@ -782,9 +936,13 @@ namespace S1DataCenter {
 				UINT16 Key3;
 				UINT16 Key4;
 			};
-
-			ULONG	Key = 0;
+			ULONGLONG Key = 0;
 		};
+
+		TRef<const wchar_t>		Name1 = nullptr;
+		TRef<const wchar_t>		Name2 = nullptr;
+		TRef<const wchar_t>		Name3 = nullptr;
+		TRef<const wchar_t>		Name4 = nullptr;
 
 		DCIndex() {}
 		DCIndex(const DCIndex& other) {
@@ -795,10 +953,10 @@ namespace S1DataCenter {
 		}
 		virtual bool Serialize(FIStream& Stream) override {
 			if (Stream.IsLoading()) {
-				Key = Stream.ReadUInt32();
+				Key = Stream.ReadUInt64();
 			}
 			else {
-				Stream.WriteUInt32(Key);
+				Stream.WriteU_int64(Key);
 			}
 
 			return true;
@@ -1058,6 +1216,7 @@ namespace S1DataCenter {
 
 		std::wstring						NameCache;
 		std::pair<WORD, WORD>				LocationCache;
+		TRef<ElementItem>					Parent = nullptr;
 
 		ElementItem() {}
 		ElementItem(const ElementItem& other) {
@@ -1150,6 +1309,40 @@ namespace S1DataCenter {
 		}
 
 		std::vector<const ElementItem*> GetChildren(const struct S1DataCenter* DC) const noexcept;
+
+		bool IsIndexEnabled() const noexcept {
+			return (Index & 1) == 0;
+		}
+
+		bool IsValid() const noexcept {
+			return Name != 0;
+		}
+
+		void SetEnableIndex(bool enable = false)noexcept {
+			if (enable) {
+				Index = Index | 1;
+			}
+			else {
+				Index = Index & 0xFFFE;
+			}
+		}
+
+		std::wstring BuildPath()const noexcept {
+			auto cursor = Parent;
+
+			std::wstring outPath;
+			outPath.reserve(512);
+			outPath += NameRef.Get();
+			
+			while (cursor.Get()) {
+				outPath.insert(outPath.begin(), '.');
+				outPath.insert(0, cursor->NameRef.Get());
+
+				cursor = cursor->Parent;
+			}
+
+			return std::move(outPath);
+		}
 	};
 
 	struct S1DataCenter : DCSerializable {
@@ -1197,6 +1390,7 @@ namespace S1DataCenter {
 			Elements.Clear();
 			ValuesMap.Clear();
 			NamesMap.Clear();
+			CachedElementIndices.clear();
 
 			bIsLoaded = false;
 			state = DCState::Idle;
@@ -1251,7 +1445,7 @@ namespace S1DataCenter {
 
 		bool InsertElementTree(ElementItemRaw* Root)noexcept {
 			std::pair<WORD, WORD> LocalRootIndices;
-			if (!AllocateElement(*Root, LocalRootIndices)) {
+			if (!AllocateElement(Root, LocalRootIndices)) {
 				return false;
 			}
 
@@ -1259,30 +1453,132 @@ namespace S1DataCenter {
 
 			if (Root->Children.size()) {
 				std::pair<WORD, WORD> childrenIndices;
-				if (!AllocateElements(Root->Children, childrenIndices)) {
+
+				std::vector<ElementItemRaw*> UniqueRootChildren;
+				UniqueRootChildren.reserve(Root->Children.size());
+
+				//Reset all
+				for (size_t i = 0; i < Root->Children.size(); i++)
+				{
+					Root->Children[i]->Used = false;
+				}
+
+				for (size_t i = 0; i < Root->Children.size(); i++)
+				{
+					if (!Root->Children[i]->Used) {
+						UniqueRootChildren.push_back(Root->Children[i]);
+						Root->Children[i]->Used = true;
+					}
+				}
+
+				Root->Children = std::move(UniqueRootChildren);
+
+				//allocate empty elements for all root children
+				if (!AllocateElementsSection((INT)Root->Children.size(), childrenIndices)) {
 					return false;
 				}
 
+				//set root node children indices
 				GetElement(LocalRootIndices)->ChildrenIndices = childrenIndices;
 
 				//Parse all sub tree
 				for (size_t i = 0; i < Root->Children.size(); i++) {
-					if (!InsertElementTreeImpl(&Root->Children[i], std::pair<WORD, WORD>(childrenIndices.first, childrenIndices.second + i))) {
+
+					//check if already exists
+					if (Root->Children[i]->HasValidDCIndices()) {
+
+						//validate that the indices are part of the root children
+						if (Root->Children[i]->CachedDCElementIndices.first != childrenIndices.first ||
+							Root->Children[i]->CachedDCElementIndices.second < childrenIndices.second ||
+							Root->Children[i]->CachedDCElementIndices.second >(childrenIndices.second + (WORD)Root->Children.size())) {
+							Message("Found existing node but not inside root children indices\n\n\tNode[%ws]", Root->Children[i]->Name.c_str());
+							return false;
+						}
+
+						continue;
+					}
+
+					//cache element indices for duplication check and skip
+					Root->Children[i]->CachedDCElementIndices = childrenIndices;
+
+					if (!InsertElementTreeImpl(Root->Children[i], std::pair<WORD, WORD>(childrenIndices.first, childrenIndices.second + i))) {
 						return false;
 					}
 				}
 			}
 
-			if (!ValuesMap.BuildHashTables()) {
+			/*std::sort(NamesMap.begin(), Population.end(), [](People* a, People* b) {
+				if (a->name != b->name) return a->name < b->name;
+				return a->city < b->city;
+			});*/
+
+			/*if (!ValuesMap.BuildHashTables()) {
 				return false;
-			}
+			}*/
 
 			if (!NamesMap.BuildHashTables()) {
 				return false;
 			}
 
+			//sort all bucket elements by Hash for names map
+			for (size_t i = 0; i < NamesMap.Buckets.Buckets.size(); i++)
+			{
+				std::sort(NamesMap.Buckets.Buckets[i].Elements.begin(), NamesMap.Buckets.Buckets[i].Elements.end(),
+					[](const StringsBucket::BucketElement& a, const StringsBucket::BucketElement& b) -> bool
+					{
+						return a.Hash > b.Hash;
+					});
+			}
+
 			return true;
 		}
+
+		void BuildIndicesCache()noexcept {
+			for (size_t i = 0; i < Elements.Data.size(); i++) {
+				for (size_t j = 0; j < Elements.Data[i].Data.size(); j++)
+				{
+					ElementItem& Element = Elements.Data[i].Data[j];
+					if (!Element.IsIndexEnabled() || !Element.IsValid() || !Element.Index) {
+						continue;
+					}
+
+					auto name = Element.BuildPath();
+
+					auto item = CachedElementIndices.find(name);
+					if (item == CachedElementIndices.end()) {
+						const WORD IndexValue = (Element.Index & ELEMENT_INDEX_VALUE_MASK) >> 4;
+
+						CachedElementIndex Index;
+						Index.Name1 = Indices.Data[IndexValue].Name1;
+						Index.Name2 = Indices.Data[IndexValue].Name2;
+						Index.Name3 = Indices.Data[IndexValue].Name3;
+						Index.Name4 = Indices.Data[IndexValue].Name4;
+
+						Index.ElementNameCacheRef = Element.NameRef;
+
+						Index.Index = IndexValue;
+						Index.Flags = Element.Index & ELEMENT_INDEX_FLAGS_MASK;
+
+						CachedElementIndices.insert({
+							std::move(name),
+							std::move(Index)
+						});
+					}
+				}
+			}
+		}
+
+		void SetParents(ElementItem* element, ElementItem* parent) noexcept {
+
+			element->Parent = parent;
+
+			for (size_t i = 0; i < element->ChildCount; i++)
+			{
+				SetParents(GetElement({ element->ChildrenIndices.first , element->ChildrenIndices.second + i }), element);
+			}
+		}
+
+		std::unordered_map<std::wstring, CachedElementIndex> CachedElementIndices;
 
 	private:
 		bool InsertElementTreeImpl(ElementItemRaw* RawElement, std::pair<WORD, WORD> ElementIndices)noexcept {
@@ -1305,7 +1601,7 @@ namespace S1DataCenter {
 				GetElement(ElementIndices)->ChildrenIndices = childrenIndices;
 
 				for (size_t i = 0; i < RawElement->Children.size(); i++) {
-					if (!InsertElementTreeImpl(&RawElement->Children[i], std::pair<WORD, WORD>(childrenIndices.first, childrenIndices.second + i))) {
+					if (!InsertElementTreeImpl(RawElement->Children[i], std::pair<WORD, WORD>(childrenIndices.first, childrenIndices.second + i))) {
 						return false;
 					}
 				}
@@ -1314,13 +1610,13 @@ namespace S1DataCenter {
 			return true;
 		}
 
-		bool AllocateElements(std::vector<ElementItemRaw>& RawElements, std::pair<WORD, WORD>& OutIndices)noexcept {
+		bool AllocateElements(std::vector<ElementItemRaw*>& RawElements, std::pair<WORD, WORD>& OutIndices)noexcept {
 			auto& Block = GetElementsContainerForNewElements((INT)RawElements.size(), OutIndices.first);
 
 			//start of this elements block
 			OutIndices.second = (WORD)(Block.Data.size());
 
-			for (auto& RawElement : RawElements) {
+			for (auto* RawElement : RawElements) {
 
 				Block.Data.push_back(ElementItem());
 				Block.UsedCount++;
@@ -1331,7 +1627,7 @@ namespace S1DataCenter {
 				NewElement->Index = ++ElementsIndex;
 				NewElement->LocationCache.first = OutIndices.first;
 				NewElement->LocationCache.second = (WORD)(Block.Data.size() - 1);
-				NewElement->NameCache = std::move(RawElement.Name);
+				NewElement->NameCache = std::move(RawElement->Name);
 
 				WORD NameId;
 				if (!NamesMap.InsertString(NewElement->NameCache.data(), NewElement->NameCache.size(), NameId)) {
@@ -1390,7 +1686,7 @@ namespace S1DataCenter {
 
 			return true;
 		}
-		bool AllocateElement(ElementItemRaw& RawElement, std::pair<WORD, WORD>& OutIndices) {
+		bool AllocateElement(ElementItemRaw* RawElement, std::pair<WORD, WORD>& OutIndices) {
 			auto& Block = GetElementsContainerForNewElements(1, OutIndices.first);
 
 			//start of this elements block
@@ -1405,7 +1701,7 @@ namespace S1DataCenter {
 			NewElement->Index = ++ElementsIndex;
 			NewElement->LocationCache.first = OutIndices.first;
 			NewElement->LocationCache.second = (WORD)(Block.Data.size() - 1);
-			NewElement->NameCache = std::move(RawElement.Name);
+			NewElement->NameCache = std::move(RawElement->Name);
 
 			WORD NameId;
 			if (!NamesMap.InsertString(NewElement->NameCache.data(), NewElement->NameCache.size(), NameId)) {
@@ -1414,6 +1710,22 @@ namespace S1DataCenter {
 			}
 
 			NewElement->Name = NameId;
+
+			return true;
+		}
+		bool AllocateElementsSection(INT Count, std::pair<WORD, WORD>& OutStartIndices)noexcept {
+			auto& Block = GetElementsContainerForNewElements(Count, OutStartIndices.first);
+
+			OutStartIndices.second = (WORD)(Block.Data.size() - 1);
+
+			for (INT i = 0; i < Count; i++)
+			{
+				Block.Data.push_back(ElementItem());
+				Block.UsedCount++;
+
+				Block.Data.back().LocationCache.first = OutStartIndices.first;
+				Block.Data.back().LocationCache.second = (WORD)(Block.Data.size() - 1);
+			}
 
 			return true;
 		}

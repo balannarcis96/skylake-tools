@@ -1,5 +1,7 @@
 #include "../App.h"
 
+#include <iomanip>
+
 DWORD appStrihash(const TCHAR* Data);
 
 bool S1DataCenter::S1DataCenter::Serialize(FIStream& Stream)
@@ -25,35 +27,19 @@ bool S1DataCenter::S1DataCenter::Serialize(FIStream& Stream)
 		return false;
 	}
 
-	std::string FileName = "C:/DC_Indices";
-	FileName += std::to_string(Version);
-	FileName += ".txt";
-	std::ofstream IndicesFile = std::ofstream(FileName.c_str());
-
-	IndicesFile << "TotalCount: " << std::to_string(Indices.Count) << '\n' << '\n';
-
-	for (size_t i = 0; i < Indices.Count; i++) {
-		IndicesFile << std::to_string(Indices.Data[i].Key1);
-		IndicesFile << ' ';
-		IndicesFile << std::to_string(Indices.Data[i].Key2);
-		IndicesFile << ' ';
-		IndicesFile << std::to_string(Indices.Data[i].Key3);
-		IndicesFile << ' ';
-		IndicesFile << std::to_string(Indices.Data[i].Key4);
-		IndicesFile << ' ';
-		IndicesFile << ' ';
-		IndicesFile << ' ';
-		IndicesFile << '\t';
-		IndicesFile << std::to_string(Indices.Data[i].Key);
-		IndicesFile << '\n';
-	}
-
 	if (!Attributes.Serialize(Stream)) {
 		return false;
 	}
 
 	if (!Elements.Serialize(Stream)) {
 		return false;
+	}
+
+	if (!Stream.IsLoading()) {
+		//Values map is not used by client !
+		for (auto& buckets : ValuesMap.Buckets.Buckets) {
+			buckets.Clear();
+		}
 	}
 
 	if (!ValuesMap.Serialize(Stream)) {
@@ -97,6 +83,38 @@ bool S1DataCenter::S1DataCenter::Prepare()
 	if (!PrepareElements()) {
 		return false;
 	}
+
+	//Cache indices names
+	for (size_t i = 0; i < Indices.Data.size(); i++) {
+		if (Indices.Data[i].Key1) {
+			Indices.Data[i].Name1 = NamesMap.AllStrings.Data[Indices.Data[i].Key1 - 1].CachedString;
+		}
+		else {
+			continue;
+		}
+
+		if (Indices.Data[i].Key2) {
+			Indices.Data[i].Name2 = NamesMap.AllStrings.Data[Indices.Data[i].Key2 - 1].CachedString;
+		}
+		else {
+			continue;
+		}
+
+		if (Indices.Data[i].Key3) {
+			Indices.Data[i].Name3 = NamesMap.AllStrings.Data[Indices.Data[i].Key3 - 1].CachedString;
+		}
+		else {
+			continue;
+		}
+
+		if (Indices.Data[i].Key4) {
+			Indices.Data[i].Name4 = NamesMap.AllStrings.Data[Indices.Data[i].Key4 - 1].CachedString;
+		}
+	}
+
+	SetParents(GetRootElement().Get(), nullptr);
+
+	BuildIndicesCache();
 
 	return true;
 }
@@ -177,4 +195,15 @@ std::vector<const S1DataCenter::ElementItem*> S1DataCenter::ElementItem::GetChil
 	}
 
 	return std::move(Out);
+}
+
+bool S1DataCenter::DCMap::InsertStringForElement(ElementItem* Element, const wchar_t* String, size_t StringSize, WORD& StringId) noexcept
+{
+	if (!InsertString(String, StringSize, StringId)) {
+		return false;
+	}
+
+	AllStrings.Data[StringId - 1].RefElements.push_back(Element);
+
+	return true;
 }
