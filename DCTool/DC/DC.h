@@ -9,12 +9,15 @@
 static INT					GSavingCompressionChunkSize = SAVING_COMPRESSION_CHUNK_SIZE;
 static BOOL					GAlwaysBiasCompressionForSize = FALSE;
 
-#define EU_9303_KEY "457D8D7F84C0D759FB8C802FBDEC3264"
-#define EU_9303_IV "5ADB85308FFD0A33B9B7D32F0AE42255"
+//NA x64 Patch:98.02 
+//16577B197E1811C206FF76FF04C9011C
+//7DCA909F20D01D512DC1A0522C346C39
+#define DC_KEY "04C9011C06FF76FF7E1811C216577B19"
+#define DC_IV "2C346C392DC1A05220D01D517DCA909F"
 
 //Revision: 366226
-//#define EU_9303_KEY "B5AE92062ACC7452EB6FBB44EC2D612D"
-//#define EU_9303_IV "11E5B808F6922217F6FFB977321A0960"
+//#define DC_KEY "B5AE92062ACC7452EB6FBB44EC2D612D"
+//#define DC_IV "11E5B808F6922217F6FFB977321A0960"
 
 struct DCTool : UIElement<UIElementType::DC> {
 	bool Initialize();
@@ -29,7 +32,7 @@ struct DCTool : UIElement<UIElementType::DC> {
 		SaveFileName[0] = 0;
 
 		//strcpy_s(FileName, "DC.bin");
-		strcpy_s(FileName, "DataCenter_Final_TW.366226.unpacked");
+		strcpy_s(FileName, "DC_366226.dat" /*"DataCenter_Final_TW.366226.unpacked"*/);
 		strcpy_s(SaveFileName, "Saved_32.bin");
 		strcpy_s(ImportBasePath, "C:/DC_366226/");
 		wcscpy_s(ExportBasePath, L"C:/");
@@ -56,11 +59,11 @@ private:
 	char						SaveFileName[1024];
 	wchar_t						ExportBasePath[MAX_PATH];
 	char						ImportBasePath[MAX_PATH];
-	
+
 	INT							DCFilesType = 0;
 
-	char						Key[33] = EU_9303_KEY;
-	char						IV[33] = EU_9303_IV;
+	char						Key[33] = DC_KEY;
+	char						IV[33] = DC_KEY;
 
 	S1DataCenter::S1DataCenter	DataCenter;
 };

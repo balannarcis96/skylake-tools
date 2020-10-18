@@ -202,7 +202,7 @@ void EscapeValue(std::wstring& String, bool reverse = false)noexcept {
 	}
 }
 
-wchar_t* PrintAttributes(wchar_t* Buffer, S1DataCenter::ElementItem* Element)noexcept {
+wchar_t* PrintAttributes(wchar_t* Buffer, S1DataCenter::ElementItem* Element, const std::wstring& Path)noexcept {
 	if (!Element->Attributes.size()) {
 		goto print_element_end;
 	}
@@ -217,14 +217,16 @@ wchar_t* PrintAttributes(wchar_t* Buffer, S1DataCenter::ElementItem* Element)noe
 		memcpy_s(Buffer, Len * sizeof(wchar_t), Attribute->NameRef.Get(), Len * sizeof(wchar_t));
 		Buffer += Len;
 
-		std::wstring AttrFullName = Element->NameRef.Get();
+		std::wstring AttrFullName = Path ;
 		AttrFullName += L'.';
 		AttrFullName += Attribute->NameRef.Get();
 
 		auto Item = AttributeTypes.find(AttrFullName);
 		if (Item == AttributeTypes.end()) {
-			//Message("AttrFullName e[%ws] a[%ws] -> [%ws]", Element->NameRef.Get(), Attribute->NameRef.Get(), AttrFullName.c_str());
-			AttributeTypes.insert(std::pair<std::wstring, WORD>(AttrFullName, (WORD)Attribute->TypeInfo));
+			AttributeTypes.insert(std::pair<std::wstring, WORD>(std::move(AttrFullName), (WORD)(Attribute->TypeInfo & 3)));
+		}
+		else if ((Item->second & 3) != (Attribute->TypeInfo & 3)) {
+			Message("Wrong implementation, id depends on the full path!");
 		}
 
 		*(Buffer++) = L'=';
@@ -252,17 +254,20 @@ print_element_end:
 	return Buffer;
 }
 
-wchar_t* XmlFromDCElement(TRef<S1DataCenter::ElementItem> Element, wchar_t* Buffer, INT Depth = 0)noexcept {
+wchar_t* XmlFromDCElement(std::wstring Path, TRef<S1DataCenter::ElementItem> Element, wchar_t* Buffer, INT Depth = 0)noexcept {
 
 	if (Element->Name == 0) {
 		return Buffer;
 	}
 
+	Path += L'.';
+	Path += Element->NameRef.Get();
+
 	Buffer = PrintElementName(Buffer, Element.Get(), Depth);
-	Buffer = PrintAttributes(Buffer, Element.Get());
+	Buffer = PrintAttributes(Buffer, Element.Get(), Path);
 
 	for (auto& RawChild : Element->Children) {
-		Buffer = XmlFromDCElement(RawChild, Buffer, Depth + 1);
+		Buffer = XmlFromDCElement(Path, RawChild, Buffer, Depth + 1);
 	}
 
 	if (Element->Children.size()) {
@@ -357,8 +362,10 @@ bool DCAdaptors::DCXMLAdaptor::Export(const wchar_t* RootDir)
 		FileSavePath += std::to_wstring(FileIndex);
 		FileSavePath += L".xml";
 
+		std::wstring Path = RootElement->NameRef.Get();
+
 		buffer.get()[0] = '\0';
-		wchar_t* end = XmlFromDCElement(Element, buffer.get());
+		wchar_t* end = XmlFromDCElement(Path, Element, buffer.get());
 		if (end == buffer.get()) {
 			continue;
 		}
@@ -395,6 +402,8 @@ bool DCAdaptors::DCXMLAdaptor::BuildDC(const wchar_t* DirName, TRef<S1DataCenter
 	S1DataCenter::StateGuard<S1DataCenter::DCState::Building> StateGuard(DataCenter.Get());
 
 	this->DataCenter = DataCenter;
+
+	Message("Click Ok to continue\n\nPhase 1: Built Raw Structure.");
 
 	if (!DataCenter->PrepareForBuild()) {
 		Message("Failed to prepare string buckets, no memory T_T");
@@ -462,21 +471,24 @@ bool DCAdaptors::DCXMLAdaptor::BuildDC(const wchar_t* DirName, TRef<S1DataCenter
 		}
 	}
 
+	Message("Phase 1: Built Raw Structure -> Success!\n\nClick Ok to continue to\n\nPhase 2: Build Data Center Structure!");
+
 	if (!DataCenter->InsertElementTree(&RootElement)) {
 		Message("Failed to Build DC from xml data");
 		return false;
 	}
 
+	Message("Phase 2: Build Data Center Structure -> Success!\n\nClick Ok to continue to\n\nPhase 3: Save to file!");
+
 	return true;
 }
 
-ElementItemRaw* DCAdaptors::DCXMLAdaptor::PrepareXMLTree(const char* FileName, rapidxml::xml_node<>* xmlNode)noexcept {
-
-	//RawElement->Children.push_back(std::move(ElementItemRaw()));
-
-	//ElementItemRaw* NewElement = &RawElement->Children.back();
+ElementItemRaw* DCAdaptors::DCXMLAdaptor::PrepareXMLTree(const char* FileName, rapidxml::xml_node<>* xmlNode, ElementItemRaw* parentRawElement)noexcept {
 
 	auto RawElement = AllocateElement();
+	if (!RawElement->Parent.Get()) {
+		RawElement->Parent = parentRawElement;
+	}
 
 	constexpr size_t CConvertStrSize = (1024 * 1024) * 64;
 
@@ -506,7 +518,15 @@ ElementItemRaw* DCAdaptors::DCXMLAdaptor::PrepareXMLTree(const char* FileName, r
 		}
 		ConvertStr[EndLen] = L'\0';
 
-		std::wstring AttributeFullName = RawElement->Name;
+		static std::wstring AttributeFullName;
+		static bool AttributeFullNameInitialized;
+		if (!AttributeFullNameInitialized) {
+			AttributeFullName.reserve(1024);
+			AttributeFullNameInitialized = true;
+		}
+
+		AttributeFullName = L"";
+		RawElement->BuildPath(AttributeFullName);
 		AttributeFullName += L'.';
 		AttributeFullName += ConvertStr;
 
@@ -536,18 +556,20 @@ ElementItemRaw* DCAdaptors::DCXMLAdaptor::PrepareXMLTree(const char* FileName, r
 
 		RawElement->Attributes.back().Value = std::move(ConvertStr);
 		RawElement->Attributes.back().Type = Type->second;
+
+		RawElement->Attributes.back().BuildHash();
 	}
 
-	//Sort attributes by name
+	//Sort attributes by name alpha
 	std::sort(RawElement->Attributes.begin(), RawElement->Attributes.end(),
 		[](const AttributeItemRaw& left, const AttributeItemRaw& right) {
-			return left.Name.compare(right.Name) >= 0;
+			return left.Name.compare(right.Name) < 0;
 		});
 
 	//Prepare children
 	for (rapidxml::xml_node<>* child = xmlNode->first_node(); child != nullptr; child = child->next_sibling())
 	{
-		if ((RawElement->Children.push_back(PrepareXMLTree(FileName, child)), RawElement->Children.back() == nullptr)) {
+		if ((RawElement->Children.push_back(PrepareXMLTree(FileName, child, RawElement.get())), RawElement->Children.back() == nullptr)) {
 			Message("Failed to prepare node [%s] in File [%s]", child->name(), FileName);
 			return nullptr;
 		}
@@ -558,20 +580,24 @@ ElementItemRaw* DCAdaptors::DCXMLAdaptor::PrepareXMLTree(const char* FileName, r
 		RawElement->BuildHash();
 	}
 
-	//Sort children by name
+	//Sort children by name alpha
 	std::sort(RawElement->Children.begin(), RawElement->Children.end(),
 		[](const ElementItemRaw* left, const ElementItemRaw* right) {
-			return left->Name.compare(right->Name) >= 0;
+			return left->Name.compare(right->Name) < 0;
 		});
 
-	auto Key = std::move(RawElement->BuildKey());
+	extern bool GDoDeduplication;
+	
+	if (GDoDeduplication) {
+		auto Key = std::move(RawElement->BuildKey());
 
-	auto Item = ElementsCache.find(Key);
-	if (Item != ElementsCache.end()) {
-		return Item->second;
-	}
-	else {
-		ElementsCache.insert(std::move(std::pair<ElementItemRawKey, ElementItemRaw*>(std::move(Key), RawElement.get())));
+		auto Item = ElementsCache.find(Key);
+		if (Item != ElementsCache.end()) {
+			return Item->second;
+		}
+		else {
+			ElementsCache.insert(std::move(std::pair<ElementItemRawKey, ElementItemRaw*>(std::move(Key), RawElement.get())));
+		}
 	}
 
 	return RawElement.release();
@@ -588,7 +614,7 @@ bool DCAdaptors::DCXMLAdaptor::ParseXmlFile(const char* FileName, char* Buffer, 
 		return false;
 	}
 
-	if ((Parent->Children.push_back(PrepareXMLTree(FileName, XmlDoc->first_node())), !Parent->Children.back())) {
+	if ((Parent->Children.push_back(PrepareXMLTree(FileName, XmlDoc->first_node(), Parent)), !Parent->Children.back())) {
 		return false;
 	}
 
@@ -620,6 +646,7 @@ bool DCAdaptors::DCAdaptor::SerializeMetadata(const wchar_t* RootDir, INT FilesC
 		Stream.WriteUInt16(Item.second);
 	}
 
+	Stream.WriteU_int64(DataCenter->CachedElementIndices.size());
 	for (const auto& Item : DataCenter->CachedElementIndices) {
 		//Write name
 		Stream.WriteU_int64(Item.first.size() * 2);
@@ -717,34 +744,34 @@ bool DCAdaptors::DCAdaptor::ReadMetadata(const wchar_t* File, INT& FilesCount) n
 
 		//Element Name
 		size_t StrLength = Stream.ReadUInt64();
-		CachedIndex.ElementNameCache = std::wstring(Stream.Cast<wchar_t>(), StrLength);
+		CachedIndex.ElementNameCache = std::wstring((const wchar_t*)Stream.Cast<wchar_t>(), StrLength / 2);
 		Stream._pos += StrLength;
 
 		//Name1
 		StrLength = Stream.ReadUInt64();
 		if (StrLength) {
-			CachedIndex.NameCache1 = std::wstring(Stream.Cast<wchar_t>(), StrLength);
+			CachedIndex.NameCache1 = std::wstring(Stream.Cast<wchar_t>(), StrLength / 2);
 			Stream._pos += StrLength;
 		}
 
 		//Name2
 		StrLength = Stream.ReadUInt64();
 		if (StrLength) {
-			CachedIndex.NameCache2 = std::wstring(Stream.Cast<wchar_t>(), StrLength);
+			CachedIndex.NameCache2 = std::wstring(Stream.Cast<wchar_t>(), StrLength / 2);
 			Stream._pos += StrLength;
 		}
 
 		//Name3
 		StrLength = Stream.ReadUInt64();
 		if (StrLength) {
-			CachedIndex.NameCache3 = std::wstring(Stream.Cast<wchar_t>(), StrLength);
+			CachedIndex.NameCache3 = std::wstring(Stream.Cast<wchar_t>(), StrLength / 2);
 			Stream._pos += StrLength;
 		}
 
 		//Name4
 		StrLength = Stream.ReadUInt64();
 		if (StrLength) {
-			CachedIndex.NameCache4 = std::wstring(Stream.Cast<wchar_t>(), StrLength);
+			CachedIndex.NameCache4 = std::wstring(Stream.Cast<wchar_t>(), StrLength / 2);
 			Stream._pos += StrLength;
 		}
 
@@ -754,10 +781,10 @@ bool DCAdaptors::DCAdaptor::ReadMetadata(const wchar_t* File, INT& FilesCount) n
 		DataCenter->CachedElementIndices.insert({ CachedIndex.ElementNameCache, std::move(CachedIndex) });
 	}
 
-	auto result = AttributeTypes.find(L"String.id");
-	if (result == AttributeTypes.end()) {
-
-		Message("Read %lld Attribute types from metadata", AttributeTypes.size());
+	auto item = AttributeTypes.find(L"__root__.Abnormality.Abnormal.id");
+	if (item == AttributeTypes.end()) {
+		Message("Could not find id for __root__.Abnormality.Abnormal.id id DCMetadata");
+		return false;
 	}
 
 	Message("Read %lld Attribute types from metadata", AttributeTypes.size());

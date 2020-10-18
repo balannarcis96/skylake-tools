@@ -1,5 +1,9 @@
 #include "../App.h"
 
+#include <queue>
+
+bool GDoDeduplication = false;
+
 constexpr auto MAX_DC_FILE_SIZE = (1024 * 1024 * 1024);
 
 #include "AES.h"
@@ -100,6 +104,16 @@ bool DCTool::Initialize()
 
 	Show();
 
+	extern std::queue<ElementItemRaw*> RawElementsPool;
+
+#if !_DEBUG
+	//preallocate raw elements
+	for (size_t i = 0; i < 1024 * 1024 * 15; i++)
+	{
+		RawElementsPool.push(new ElementItemRaw());
+	}
+#endif
+
 	return true;
 }
 
@@ -179,6 +193,8 @@ void DCTool::RenderUI()
 					ImGui::Checkbox("Encrypt", &EncryptDC);
 				}
 
+				ImGui::Checkbox("Deduplicate elements(takes longer, yields smaller binary)", &GDoDeduplication);
+
 				ImGui::NewLine();
 				if (ImGui::Button("Build DC")) {
 					DataCenter.Clear();
@@ -232,7 +248,13 @@ void DCTool::RenderUI()
 							}
 
 							if (EncryptDC) {
-								if (!::EncryptDC(DCStream, Key, IV)) {
+								uint8_t Key[16];
+								uint8_t IV[16];
+
+								GetKey(Key);
+								GetIV(IV);
+
+								if (!::EncryptDC(DCStream, (char*)Key, (char*)IV)) {
 									Message("Failed to encrypt DC");
 									break;
 								}

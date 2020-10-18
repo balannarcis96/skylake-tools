@@ -38,7 +38,7 @@ namespace DCAdaptors {
 
 	private:
 		bool ParseXmlFile(const char* FileName, char* Buffer, size_t BufferLength, ElementItemRaw* Parent) noexcept;
-		ElementItemRaw* PrepareXMLTree(const char* FileName, rapidxml::xml_node<>* xmlNode)noexcept;
+		ElementItemRaw* PrepareXMLTree(const char* FileName, rapidxml::xml_node<>* xmlNode, ElementItemRaw* parentRawElement)noexcept;
 	};
 }
 

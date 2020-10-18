@@ -197,13 +197,10 @@ std::vector<const S1DataCenter::ElementItem*> S1DataCenter::ElementItem::GetChil
 	return std::move(Out);
 }
 
-bool S1DataCenter::DCMap::InsertStringForElement(ElementItem* Element, const wchar_t* String, size_t StringSize, WORD& StringId) noexcept
+std::wstring S1DataCenter::AttributeItem::BuildPath(const ElementItem* parent) const noexcept
 {
-	if (!InsertString(String, StringSize, StringId)) {
-		return false;
-	}
-
-	AllStrings.Data[StringId - 1].RefElements.push_back(Element);
-
-	return true;
+	std::wstring outPath = parent->BuildPath();
+	outPath += L'.';
+	outPath += NameRef.Get();
+	return std::move(outPath);
 }

@@ -3,7 +3,7 @@
 #define _USE_MATH_DEFINES
 #define _CRT_SECURE_NO_WARNINGS
 
-//#define DC_64 0
+#define DC_64 FALSE
 
 #include <math.h>
 #include <algorithm>
