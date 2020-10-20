@@ -3,7 +3,6 @@
 namespace DCAdaptors {
 	struct NOVTABLE DCAdaptor {
 		TRef<S1DataCenter::S1DataCenter>							DataCenter = nullptr;
-		std::vector<std::string>									AllXmlFiles;
 
 		//Used for duplicate checks
 		std::unordered_map<ElementItemRawKey, ElementItemRaw*>		ElementsCache;
@@ -18,7 +17,6 @@ namespace DCAdaptors {
 
 		virtual void Clear()noexcept {
 			ElementsCache.clear();
-			AllXmlFiles.clear();
 			DataCenter = nullptr;
 		}
 

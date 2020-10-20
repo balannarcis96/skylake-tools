@@ -330,6 +330,19 @@ void DCTool::RenderUI()
 				}
 			}
 
+			if (DataCenter.IsLoaded()) {
+				if (ImGui::Button("Dump Indices")) {
+					DataCenter.DumpIndices();
+				}
+			}
+
+			if (DataCenter.IsLoaded()) {
+				ImGui::SameLine();
+				if (ImGui::Button("Dump Root Children")) {
+					DataCenter.DumpRootChildren();
+				}
+			}
+
 			ImGui::EndTabItem();
 		}
 		if (ImGui::BeginTabItem("Edit"))

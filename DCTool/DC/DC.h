@@ -32,9 +32,9 @@ struct DCTool : UIElement<UIElementType::DC> {
 		SaveFileName[0] = 0;
 
 		//strcpy_s(FileName, "DC.bin");
-		strcpy_s(FileName, "DC_366226.dat" /*"DataCenter_Final_TW.366226.unpacked"*/);
+		strcpy_s(FileName, "DC_291440.dat" /*"DataCenter_Final_TW.366226.unpacked"*/);
 		strcpy_s(SaveFileName, "Saved_32.bin");
-		strcpy_s(ImportBasePath, "C:/DC_366226/");
+		strcpy_s(ImportBasePath, "C:/DC_291440/");
 		wcscpy_s(ExportBasePath, L"C:/");
 	}
 

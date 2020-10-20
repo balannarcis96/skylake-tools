@@ -217,7 +217,7 @@ wchar_t* PrintAttributes(wchar_t* Buffer, S1DataCenter::ElementItem* Element, co
 		memcpy_s(Buffer, Len * sizeof(wchar_t), Attribute->NameRef.Get(), Len * sizeof(wchar_t));
 		Buffer += Len;
 
-		std::wstring AttrFullName = Path ;
+		std::wstring AttrFullName = Path;
 		AttrFullName += L'.';
 		AttrFullName += Attribute->NameRef.Get();
 
@@ -478,6 +478,11 @@ bool DCAdaptors::DCXMLAdaptor::BuildDC(const wchar_t* DirName, TRef<S1DataCenter
 		return false;
 	}
 
+	if (!DataCenter->BuildIndices()) {
+		Message("Failed to Build DC Indices");
+		return false;
+	}
+
 	Message("Phase 2: Build Data Center Structure -> Success!\n\nClick Ok to continue to\n\nPhase 3: Save to file!");
 
 	return true;
@@ -587,7 +592,7 @@ ElementItemRaw* DCAdaptors::DCXMLAdaptor::PrepareXMLTree(const char* FileName, r
 		});
 
 	extern bool GDoDeduplication;
-	
+
 	if (GDoDeduplication) {
 		auto Key = std::move(RawElement->BuildKey());
 
@@ -646,47 +651,53 @@ bool DCAdaptors::DCAdaptor::SerializeMetadata(const wchar_t* RootDir, INT FilesC
 		Stream.WriteUInt16(Item.second);
 	}
 
+	//Original indices
+	Stream.WriteU_int64(DataCenter->Indices.Data.size());
+	for (const auto& Item : DataCenter->Indices.Data) {
+
+		if (Item.Name1.Get()) {
+			const auto NameSize = wcslen(Item.Name1.Get());
+			Stream.WriteU_int64(NameSize * 2);
+			Stream.Write((uint8_t*)Item.Name1.Get(), NameSize * 2);
+		}
+		else {
+			Stream.WriteU_int64(0);
+		}
+
+		if (Item.Name2.Get()) {
+			const auto NameSize = wcslen(Item.Name2.Get());
+			Stream.WriteU_int64(NameSize * 2);
+			Stream.Write((uint8_t*)Item.Name2.Get(), NameSize * 2);
+		}
+		else {
+			Stream.WriteU_int64(0);
+		}
+
+		if (Item.Name3.Get()) {
+			const auto NameSize = wcslen(Item.Name3.Get());
+			Stream.WriteU_int64(NameSize * 2);
+			Stream.Write((uint8_t*)Item.Name3.Get(), NameSize * 2);
+		}
+		else {
+			Stream.WriteU_int64(0);
+		}
+
+		if (Item.Name4.Get()) {
+			const auto NameSize = wcslen(Item.Name4.Get());
+			Stream.WriteU_int64(NameSize * 2);
+			Stream.Write((uint8_t*)Item.Name4.Get(), NameSize * 2);
+		}
+		else {
+			Stream.WriteU_int64(0);
+		}
+	}
+
+	//Element indices map
 	Stream.WriteU_int64(DataCenter->CachedElementIndices.size());
 	for (const auto& Item : DataCenter->CachedElementIndices) {
-		//Write name
+		//Element name
 		Stream.WriteU_int64(Item.first.size() * 2);
 		Stream.Write((uint8_t*)Item.first.data(), Item.first.size() * 2);
-
-		if (Item.second.Name1.Get()) {
-			const auto NameSize = wcslen(Item.second.Name1.Get());
-			Stream.WriteU_int64(NameSize * 2);
-			Stream.Write((uint8_t*)Item.second.Name1.Get(), NameSize * 2);
-		}
-		else {
-			Stream.WriteU_int64(0);
-		}
-
-		if (Item.second.Name2.Get()) {
-			const auto NameSize = wcslen(Item.second.Name2.Get());
-			Stream.WriteU_int64(NameSize * 2);
-			Stream.Write((uint8_t*)Item.second.Name2.Get(), NameSize * 2);
-		}
-		else {
-			Stream.WriteU_int64(0);
-		}
-
-		if (Item.second.Name3.Get()) {
-			const auto NameSize = wcslen(Item.second.Name3.Get());
-			Stream.WriteU_int64(NameSize * 2);
-			Stream.Write((uint8_t*)Item.second.Name3.Get(), NameSize * 2);
-		}
-		else {
-			Stream.WriteU_int64(0);
-		}
-
-		if (Item.second.Name4.Get()) {
-			const auto NameSize = wcslen(Item.second.Name4.Get());
-			Stream.WriteU_int64(NameSize * 2);
-			Stream.Write((uint8_t*)Item.second.Name4.Get(), NameSize * 2);
-		}
-		else {
-			Stream.WriteU_int64(0);
-		}
 
 		Stream.WriteUInt16(Item.second.Index);
 		Stream.WriteUInt16(Item.second.Flags);
@@ -737,6 +748,43 @@ bool DCAdaptors::DCAdaptor::ReadMetadata(const wchar_t* File, INT& FilesCount) n
 		AttributeTypes.insert(std::pair<std::wstring, WORD>(std::wstring(AttributeTypeNameBuffer.get(), StrLength / 2), AttrType));
 	}
 
+	//Original indices
+	const size_t OriginalIndicesSize = Stream.ReadUInt64();
+	DataCenter->Indices.Data.resize(OriginalIndicesSize);
+	DataCenter->Indices.Count = (ULONG)(OriginalIndicesSize);
+	for (size_t i = 0; i < OriginalIndicesSize; i++) {
+		auto& Index = DataCenter->Indices.Data[i];
+
+		//Name1
+		size_t StrLength = Stream.ReadUInt64();
+		if (StrLength) {
+			Index.Name1Cached = std::wstring(Stream.Cast<wchar_t>(), StrLength / 2);
+			Stream._pos += StrLength;
+		}
+
+		//Name2
+		StrLength = Stream.ReadUInt64();
+		if (StrLength) {
+			Index.Name2Cached = std::wstring(Stream.Cast<wchar_t>(), StrLength / 2);
+			Stream._pos += StrLength;
+		}
+
+		//Name3
+		StrLength = Stream.ReadUInt64();
+		if (StrLength) {
+			Index.Name3Cached = std::wstring(Stream.Cast<wchar_t>(), StrLength / 2);
+			Stream._pos += StrLength;
+		}
+
+		//Name4
+		StrLength = Stream.ReadUInt64();
+		if (StrLength) {
+			Index.Name4Cached = std::wstring(Stream.Cast<wchar_t>(), StrLength / 2);
+			Stream._pos += StrLength;
+		}
+	}
+
+	//Element indices
 	const size_t IndicesSize = Stream.ReadUInt64();
 	for (size_t i = 0; i < IndicesSize; i++)
 	{
@@ -747,36 +795,10 @@ bool DCAdaptors::DCAdaptor::ReadMetadata(const wchar_t* File, INT& FilesCount) n
 		CachedIndex.ElementNameCache = std::wstring((const wchar_t*)Stream.Cast<wchar_t>(), StrLength / 2);
 		Stream._pos += StrLength;
 
-		//Name1
-		StrLength = Stream.ReadUInt64();
-		if (StrLength) {
-			CachedIndex.NameCache1 = std::wstring(Stream.Cast<wchar_t>(), StrLength / 2);
-			Stream._pos += StrLength;
-		}
-
-		//Name2
-		StrLength = Stream.ReadUInt64();
-		if (StrLength) {
-			CachedIndex.NameCache2 = std::wstring(Stream.Cast<wchar_t>(), StrLength / 2);
-			Stream._pos += StrLength;
-		}
-
-		//Name3
-		StrLength = Stream.ReadUInt64();
-		if (StrLength) {
-			CachedIndex.NameCache3 = std::wstring(Stream.Cast<wchar_t>(), StrLength / 2);
-			Stream._pos += StrLength;
-		}
-
-		//Name4
-		StrLength = Stream.ReadUInt64();
-		if (StrLength) {
-			CachedIndex.NameCache4 = std::wstring(Stream.Cast<wchar_t>(), StrLength / 2);
-			Stream._pos += StrLength;
-		}
-
 		CachedIndex.Index = Stream.ReadUInt16();
 		CachedIndex.Flags = Stream.ReadUInt16();
+
+		CachedIndex.IndexCache = &DataCenter->Indices.Data[CachedIndex.Index];
 
 		DataCenter->CachedElementIndices.insert({ CachedIndex.ElementNameCache, std::move(CachedIndex) });
 	}

@@ -205,26 +205,70 @@ struct ElementItemRaw {
 	}
 };
 
-struct CachedElementIndex {
-	//For saving
+struct DCIndex {
+	union {
+		struct {
+			UINT16 Key1;
+			UINT16 Key2;
+			UINT16 Key3;
+			UINT16 Key4;
+		};
+		ULONGLONG Key = 0;
+	};
+
 	TRef<const wchar_t>		Name1 = nullptr;
 	TRef<const wchar_t>		Name2 = nullptr;
 	TRef<const wchar_t>		Name3 = nullptr;
 	TRef<const wchar_t>		Name4 = nullptr;
-	TRef<const wchar_t>		ElementNameCacheRef = nullptr;
+
+	std::wstring			Name1Cached;
+	std::wstring			Name2Cached;
+	std::wstring			Name3Cached;
+	std::wstring			Name4Cached;
+
+	//Info
+	INT						ElementsCount = 0;
+
+	DCIndex() {}
+	DCIndex(const DCIndex& other) {
+		Key1 = other.Key1;
+		Key2 = other.Key2;
+		Key3 = other.Key3;
+		Key4 = other.Key4;
+	}
+	bool Serialize(FIStream& Stream) noexcept {
+		if (Stream.IsLoading()) {
+			Key = Stream.ReadUInt64();
+		}
+		else {
+			Stream.WriteU_int64(Key);
+		}
+
+		return true;
+	}
+	void operator = (const DCIndex& other) {
+		Key1 = other.Key1;
+		Key2 = other.Key2;
+		Key3 = other.Key3;
+		Key4 = other.Key4;
+	}
+};
+
+struct CachedElementIndex {
+	//For saving
+	TRef<const wchar_t>					Name1 = nullptr;
+	TRef<const wchar_t>					Name2 = nullptr;
+	TRef<const wchar_t>					Name3 = nullptr;
+	TRef<const wchar_t>					Name4 = nullptr;
+	TRef<const wchar_t>					ElementNameCacheRef = nullptr;
 
 	//For building
-	std::wstring			ElementNameCache;
-	std::wstring			NameCache1;
-	std::wstring			NameCache2;
-	std::wstring			NameCache3;
-	std::wstring			NameCache4;
-
-	UINT64					Keys = 0;
+	std::wstring						ElementNameCache;
+	TRef<DCIndex>						IndexCache = nullptr;
 
 	//Shared
-	WORD					Index = 0;
-	WORD					Flags = 0;
+	WORD								Index = 0;
+	WORD								Flags = 0;
 
 	CachedElementIndex() {}
 	CachedElementIndex(CachedElementIndex&& other) noexcept {
@@ -235,13 +279,8 @@ struct CachedElementIndex {
 
 		Index = other.Index;
 		Flags = other.Flags;
-		Keys = other.Keys;
 
 		ElementNameCache = std::move(other.ElementNameCache);
-		NameCache1 = std::move(other.NameCache1);
-		NameCache2 = std::move(other.NameCache2);
-		NameCache3 = std::move(other.NameCache3);
-		NameCache4 = std::move(other.NameCache4);
 
 		other.Name1 = nullptr;
 		other.Name2 = nullptr;
@@ -249,7 +288,6 @@ struct CachedElementIndex {
 		other.Name4 = nullptr;
 		other.Index = 0;
 		other.Flags = 0;
-		other.Keys = 0;
 	}
 	CachedElementIndex& operator=(CachedElementIndex&& other) noexcept {
 		if (&other == this) {
@@ -263,13 +301,8 @@ struct CachedElementIndex {
 
 		Index = other.Index;
 		Flags = other.Flags;
-		Keys = other.Keys;
 
 		ElementNameCache = std::move(other.ElementNameCache);
-		NameCache1 = std::move(other.NameCache1);
-		NameCache2 = std::move(other.NameCache2);
-		NameCache3 = std::move(other.NameCache3);
-		NameCache4 = std::move(other.NameCache4);
 
 		other.Name1 = nullptr;
 		other.Name2 = nullptr;
@@ -277,7 +310,6 @@ struct CachedElementIndex {
 		other.Name4 = nullptr;
 		other.Index = 0;
 		other.Flags = 0;
-		other.Keys = 0;
 
 		return *this;
 	}
@@ -774,12 +806,52 @@ namespace S1DataCenter {
 
 			std::vector<std::pair<WORD, WORD>>	RefElements;
 			std::vector<std::pair<WORD, WORD>>	RefAttributes;
+			std::vector<std::pair<WORD, WORD>>	RefIndices;
 
 			StringEntry() {}
 			StringEntry(StringEntry&& other)noexcept {
 				Indices = other.Indices;
 				CachedString = other.CachedString;
+
+				RefElements = std::move(other.RefElements);
+				RefAttributes = std::move(other.RefAttributes);
+				RefIndices = std::move(other.RefIndices);
 			}
+			StringEntry& operator=(StringEntry&& other)noexcept {
+				if (&other == this) {
+					return *this;
+				}
+
+				Indices = other.Indices;
+				CachedString = other.CachedString;
+
+				RefElements = std::move(other.RefElements);
+				RefAttributes = std::move(other.RefAttributes);
+				RefIndices = std::move(other.RefIndices);
+
+				return *this;
+			}
+			StringEntry(const StringEntry& other) noexcept {
+				Indices = other.Indices;
+				CachedString = other.CachedString;
+				RefElements = other.RefElements;
+				RefAttributes = other.RefAttributes;
+				RefIndices = other.RefIndices;
+			}
+			StringEntry& operator=(const StringEntry& other) noexcept {
+				if (&other == this) {
+					return *this;
+				}
+
+				Indices = other.Indices;
+				CachedString = other.CachedString;
+				RefElements = other.RefElements;
+				RefAttributes = other.RefAttributes;
+				RefIndices = other.RefIndices;
+
+				return *this;
+			}
+
 			virtual bool Serialize(FIStream& Stream) override {
 				if (Stream.IsLoading()) {
 					Indices.first = Stream.ReadUInt16();
@@ -889,15 +961,25 @@ namespace S1DataCenter {
 
 			AllStrings.Data.push_back(StringEntry());
 
-			//StringId = (WORD)(AllStrings.Data.size() - 1);
-
 			AllStrings.Count++;
 			AllStrings.Data.back().Indices = OutIndices;
 			AllStrings.Data.back().CachedString = GetString(OutIndices.first, OutIndices.second);
 
+			//StringId = (WORD)(AllStrings.Count);
+
 			PresentStringsBig.insert({ String, OutIndices });
 
 			return true;
+		}
+
+		WORD FindString(const wchar_t* string)const noexcept {
+			for (size_t i = 0; i < AllStrings.Data.size(); i++) {
+				if (!wcscmp(string, AllStrings.Data[i].CachedString.Get())) {
+					return (WORD)(i + 1);
+				}
+			}
+
+			return 0;
 		}
 
 		bool BuildHashTables() noexcept {
@@ -945,47 +1027,6 @@ namespace S1DataCenter {
 			OutIndices.first = (WORD)(StringBlocks.Data.size() - 1);
 
 			return StringBlocks.Data.back().InsertString(String, StringSize, OutIndices.second);
-		}
-	};
-
-	struct DCIndex : DCSerializable {
-		union {
-			struct {
-				UINT16 Key1;
-				UINT16 Key2;
-				UINT16 Key3;
-				UINT16 Key4;
-			};
-			ULONGLONG Key = 0;
-		};
-
-		TRef<const wchar_t>		Name1 = nullptr;
-		TRef<const wchar_t>		Name2 = nullptr;
-		TRef<const wchar_t>		Name3 = nullptr;
-		TRef<const wchar_t>		Name4 = nullptr;
-
-		DCIndex() {}
-		DCIndex(const DCIndex& other) {
-			Key1 = other.Key1;
-			Key2 = other.Key2;
-			Key3 = other.Key3;
-			Key4 = other.Key4;
-		}
-		virtual bool Serialize(FIStream& Stream) override {
-			if (Stream.IsLoading()) {
-				Key = Stream.ReadUInt64();
-			}
-			else {
-				Stream.WriteU_int64(Key);
-			}
-
-			return true;
-		}
-		void operator = (const DCIndex& other) {
-			Key1 = other.Key1;
-			Key2 = other.Key2;
-			Key3 = other.Key3;
-			Key4 = other.Key4;
 		}
 	};
 
@@ -1225,6 +1266,7 @@ namespace S1DataCenter {
 		WORD								ChildCount = 0;
 		std::pair<WORD, WORD>				ArgsIndices = { UINT16_MAX,UINT16_MAX };
 		std::pair<WORD, WORD>				ChildrenIndices = { UINT16_MAX,UINT16_MAX };
+		bool								IsDuplicated = false;
 
 #if DC_64
 		DWORD								Padd1 = 0;
@@ -1252,6 +1294,8 @@ namespace S1DataCenter {
 
 			ArgsIndices = other.ArgsIndices;
 			ChildrenIndices = other.ChildrenIndices;
+			IsDuplicated = other.IsDuplicated;
+			Parent = other.Parent;
 
 #if DC_64
 			Padd1 = other.Padd1;
@@ -1317,6 +1361,8 @@ namespace S1DataCenter {
 
 			ArgsIndices = other.ArgsIndices;
 			ChildrenIndices = other.ChildrenIndices;
+			IsDuplicated = other.IsDuplicated;
+			Parent = other.Parent;
 
 #if DC_64
 			Padd1 = other.Padd1;
@@ -1336,6 +1382,10 @@ namespace S1DataCenter {
 			return (Index & 1) == 0;
 		}
 
+		INT GetIndexValue() const noexcept {
+			return (Index & ELEMENT_INDEX_VALUE_MASK) >> 4;
+		}
+
 		bool IsValid() const noexcept {
 			return Name != 0;
 		}
@@ -1347,6 +1397,10 @@ namespace S1DataCenter {
 			else {
 				Index = Index & 0xFFFE;
 			}
+		}
+
+		void SetIndex(INT i, INT Flags)noexcept {
+			Index = (i << 4) | (Flags & ELEMENT_INDEX_FLAGS_MASK);
 		}
 
 		std::wstring BuildPath()const noexcept {
@@ -1564,7 +1618,6 @@ namespace S1DataCenter {
 		}
 
 		void BuildIndicesCache()noexcept {
-			return;
 			for (size_t i = 0; i < Elements.Data.size(); i++) {
 				for (size_t j = 0; j < Elements.Data[i].Data.size(); j++)
 				{
@@ -1572,7 +1625,6 @@ namespace S1DataCenter {
 					if (!Element.IsIndexEnabled() || !Element.IsValid() || !Element.Index) {
 						continue;
 					}
-
 
 					auto name = Element.BuildPath();
 
@@ -1599,6 +1651,11 @@ namespace S1DataCenter {
 				}
 			}
 		}
+
+		bool BuildIndices() noexcept;
+
+		void DumpIndices() const noexcept;
+		void DumpRootChildren()  noexcept;
 
 		void SetParents(ElementItem* element, ElementItem* parent) noexcept {
 
